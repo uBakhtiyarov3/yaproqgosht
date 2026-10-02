@@ -74,15 +74,13 @@ ssh -i ~/Downloads/ssh-key.key ubuntu@SERVER_IP
 # Google Cloud: konsoldagi "SSH" tugmasini bosish kifoya
 ```
 
-Serverda:
+Serverda **bitta buyruq**:
 
 ```bash
-sudo apt update && sudo apt install -y git
-git clone https://github.com/uBakhtiyarov3/yaproqgosht.git
-cd yaproqgosht
-git checkout claude/zen-euler-bvolwi     # (main ga birlashtirilgach bu qator kerak emas)
-bash deploy/install.sh
+curl -fsSL https://raw.githubusercontent.com/uBakhtiyarov3/yaproqgosht/claude/zen-euler-bvolwi/deploy/get.sh | bash
 ```
+
+(U git o'rnatadi, loyihani yuklab oladi va `deploy/install.sh` ni ishga tushiradi.)
 
 Skript so'raydi: **BOT_TOKEN**, **ADMIN_IDS** (`2076925033`), **DOMAIN**, **DUCKDNS_TOKEN** (bo'lsa).
 Keyin o'zi: swap yaratadi, Docker o'rnatadi, portlarni ochadi, botni va HTTPS ni ishga tushiradi.
