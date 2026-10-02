@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v={{v}}">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="config.js?v={{v}}"></script>
 </head>
 <body>
   <div class="bg" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
@@ -17,69 +18,104 @@
     <!-- ===== MENYU ===== -->
     <section class="view active" id="view-menu">
       <header class="hero">
+        <div class="lang-switch" id="lang-switch">
+          <button data-lang="uz">UZ</button><button data-lang="ru">RU</button>
+        </div>
         <div class="crown">♛</div>
         <h1 class="logo">Yaproq go'sht</h1>
         <p class="tagline">BURGER • COFFEE • GOOD MOOD</p>
         <div class="closed-banner hidden" id="closed-banner"></div>
       </header>
+      <div class="search">
+        <span class="search-ico">🔍</span>
+        <input id="search" type="search" autocomplete="off" data-i18n-ph="search">
+        <button class="search-clear hidden" id="search-clear" aria-label="clear">✕</button>
+      </div>
       <nav class="cats" id="cats"></nav>
       <div id="menu-list" class="menu-list">
         <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
       </div>
       <footer class="perks">
-        <span>🍔 Yangi ingredientlar</span><span>☕ Issiq kofe</span><span>😊 Yaxshi kayfiyat</span>
+        <span data-i18n="perk1"></span><span data-i18n="perk2"></span><span data-i18n="perk3"></span>
       </footer>
     </section>
 
     <!-- ===== SAVAT ===== -->
     <section class="view" id="view-cart">
-      <div class="page-head"><h2>Savat</h2><button class="link-btn" id="clear-cart">Tozalash</button></div>
+      <div class="page-head"><h2 data-i18n="cart"></h2><button class="link-btn" id="clear-cart" data-i18n="clear"></button></div>
       <div id="cart-list"></div>
       <div id="cart-summary" class="summary"></div>
-      <button class="primary-btn hidden" id="to-checkout">Rasmiylashtirish</button>
+      <button class="primary-btn hidden" id="to-checkout" data-i18n="checkout"></button>
     </section>
 
     <!-- ===== RASMIYLASHTIRISH ===== -->
     <section class="view" id="view-checkout">
-      <div class="page-head"><h2>Buyurtma berish</h2></div>
+      <div class="page-head"><h2 data-i18n="checkoutTitle"></h2></div>
       <form id="checkout-form" novalidate>
+        <div class="segmented" id="type-seg">
+          <button type="button" data-type="delivery" data-i18n="delivery"></button>
+          <button type="button" data-type="pickup" data-i18n="pickup"></button>
+        </div>
+
         <label class="field">
-          <span>Qabul qiluvchi ismi</span>
-          <input name="name" id="f-name" autocomplete="name" placeholder="Ismingiz" maxlength="64" required>
+          <span data-i18n="name"></span>
+          <input name="name" id="f-name" autocomplete="name" data-i18n-ph="namePh" maxlength="64" required>
         </label>
         <label class="field">
-          <span>Telefon raqam</span>
+          <span data-i18n="phone"></span>
           <div class="phone-input">
             <span class="prefix">+998</span>
             <input name="phone" id="f-phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="90 123 45 67" maxlength="12" required>
           </div>
         </label>
+
+        <div id="delivery-block">
+          <label class="field">
+            <span data-i18n="address"></span>
+            <textarea name="address" id="f-address" rows="2" data-i18n-ph="addressPh" maxlength="300" required></textarea>
+          </label>
+          <button type="button" class="ghost-btn" id="geo-btn" data-i18n="geo"></button>
+        </div>
+        <div class="pickup-box hidden" id="pickup-block"></div>
+
+        <div class="field"><span data-i18n="when"></span></div>
+        <div class="segmented" id="time-seg">
+          <button type="button" data-time="asap" data-i18n="asap"></button>
+          <button type="button" data-time="later" data-i18n="later"></button>
+        </div>
+        <div id="slot-picker" class="slot-picker hidden">
+          <div class="chips" id="slot-days"></div>
+          <div class="chips times" id="slot-times"></div>
+        </div>
+
         <label class="field">
-          <span>Yetkazish manzili</span>
-          <textarea name="address" id="f-address" rows="2" placeholder="Shahar, ko'cha, uy, xonadon, mo'ljal" maxlength="300" required></textarea>
-        </label>
-        <button type="button" class="ghost-btn" id="geo-btn">📍 Joriy joylashuvimni qo'shish</button>
-        <label class="field">
-          <span>Izoh (ixtiyoriy)</span>
-          <input name="comment" id="f-comment" placeholder="Masalan: domofon 25, qo'ng'iroq qiling" maxlength="300">
+          <span data-i18n="comment"></span>
+          <textarea name="comment" id="f-comment" rows="2" data-i18n-ph="commentPh" maxlength="300"></textarea>
         </label>
 
-        <div class="field"><span>To'lov usuli</span></div>
+        <div class="field"><span data-i18n="promo"></span></div>
+        <div class="promo-row">
+          <input id="f-promo" autocomplete="off" autocapitalize="characters" data-i18n-ph="promoPh" maxlength="32">
+          <button type="button" class="promo-btn" id="promo-apply" data-i18n="apply"></button>
+        </div>
+        <p class="promo-msg hidden" id="promo-msg"></p>
+
+        <div class="field"><span data-i18n="payment"></span></div>
         <div class="pay-options">
           <label class="pay-option">
             <input type="radio" name="payment" value="cash" checked>
-            <div class="pay-body"><b>💵 Naqd</b><small>Kuryerga to'lash</small></div>
+            <div class="pay-body"><b data-i18n="cash"></b><small data-i18n="cashSub"></small></div>
           </label>
           <label class="pay-option disabled" aria-disabled="true">
             <input type="radio" name="payment" value="card" disabled>
-            <div class="pay-body"><b>💳 Karta</b><small>Click / Payme</small></div>
-            <span class="soon">Tez kunda</span>
+            <div class="pay-body"><b data-i18n="card"></b><small>Click / Payme</small></div>
+            <span class="soon" data-i18n="soon"></span>
           </label>
         </div>
 
         <div id="checkout-summary" class="summary"></div>
         <p class="form-error hidden" id="form-error"></p>
-        <button type="submit" class="primary-btn" id="submit-btn">Buyurtmani tasdiqlash</button>
+        <button type="submit" class="primary-btn" id="submit-btn" data-i18n="confirm"></button>
       </form>
     </section>
 
@@ -87,18 +123,18 @@
     <section class="view" id="view-success">
       <div class="success">
         <div class="success-icon">✓</div>
-        <h2>Buyurtma qabul qilindi!</h2>
-        <p>Buyurtma ID:</p>
+        <h2 data-i18n="placed"></h2>
+        <p data-i18n="orderId"></p>
         <div class="code-badge" id="success-code"></div>
-        <p class="muted">Holat o'zgarishi haqida botda xabar beramiz.</p>
-        <button class="primary-btn" id="track-btn">Buyurtmani kuzatish</button>
-        <button class="ghost-btn" data-go="menu">Menyuga qaytish</button>
+        <p class="muted" data-i18n="placedSub"></p>
+        <button class="primary-btn" id="track-btn" data-i18n="track"></button>
+        <button class="ghost-btn" data-go="menu" data-i18n="backToMenu"></button>
       </div>
     </section>
 
     <!-- ===== BUYURTMALAR ===== -->
     <section class="view" id="view-orders">
-      <div class="page-head"><h2>Buyurtmalarim</h2></div>
+      <div class="page-head"><h2 data-i18n="myOrders"></h2></div>
       <div id="orders-list"></div>
     </section>
 
@@ -116,12 +152,12 @@
   <div class="cart-bar hidden" id="cart-bar">
     <span id="cart-bar-count"></span>
     <b id="cart-bar-total"></b>
-    <span class="cart-bar-go">Savat <span aria-hidden="true">→</span></span>
+    <span class="cart-bar-go"><span data-i18n="cart"></span> <span aria-hidden="true">→</span></span>
   </div>
   <nav class="tabbar">
-    <button data-go="menu" class="active"><i>🍔</i><span>Menyu</span></button>
-    <button data-go="cart"><i>🛒</i><span>Savat</span><em class="badge hidden" id="cart-badge">0</em></button>
-    <button data-go="orders"><i>📦</i><span>Buyurtmalar</span></button>
+    <button data-go="menu" class="active"><i>🍔</i><span data-i18n="tabMenu"></span></button>
+    <button data-go="cart"><i>🛒</i><span data-i18n="cart"></span><em class="badge hidden" id="cart-badge">0</em></button>
+    <button data-go="orders"><i>📦</i><span data-i18n="tabOrders"></span></button>
   </nav>
   <div class="toast hidden" id="toast"></div>
 

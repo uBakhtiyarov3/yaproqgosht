@@ -7,18 +7,12 @@ from aiogram.types import InlineKeyboardMarkup
 
 from . import db
 from .config import config
-from .keyboards import order_staff_kb, order_track_kb
-from .utils import STATUS_LABELS, format_order
+from .i18n import t
+from .keyboards import order_staff_kb, order_track_kb, rating_kb
+from .roles import lang_of
+from .utils import format_order, h
 
 log = logging.getLogger(__name__)
-
-CUSTOMER_TEXTS = {
-    "accepted": "✅ Buyurtmangiz <code>{code}</code> qabul qilindi! Tez orada tayyorlashni boshlaymiz.",
-    "cooking": "👨‍🍳 Buyurtmangiz <code>{code}</code> tayyorlanmoqda...",
-    "delivering": "🛵 Buyurtmangiz <code>{code}</code> yo'lda! Kuryer tez orada yetib boradi.",
-    "delivered": "🎉 Buyurtmangiz <code>{code}</code> yetkazildi. Yoqimli ishtaha! Yana kutamiz 😊",
-    "cancelled": "❌ Afsuski, buyurtmangiz <code>{code}</code> bekor qilindi.{reason}\nSavollar bo'lsa, biz bilan bog'laning.",
-}
 
 
 async def staff_recipients() -> list[int]:
@@ -42,14 +36,12 @@ async def notify_new_order(bot: Bot, order_id: int, notify_customer: bool = True
     if not notify_customer:  # bot ichidagi savatdan berilganda mijozga tasdiq allaqachon ko'rsatilgan
         return
     # Mijozga tasdiq
+    lang = await lang_of(order["user_id"])
     try:
         await bot.send_message(
             order["user_id"],
-            f"🧾 Buyurtmangiz <code>{order['code']}</code> qabul qilish uchun yuborildi!\n"
-            f"Holati: {STATUS_LABELS['new']}\n\n"
-            "Holat o'zgarganda sizga shu yerda xabar beramiz. "
-            "Jarayonni «📦 Buyurtmalarim» bo'limida ham kuzatishingiz mumkin.",
-            reply_markup=order_track_kb(order["code"]),
+            t("sent_new", lang, code=order["code"]),
+            reply_markup=order_track_kb(order["code"], lang),
         )
     except (TelegramForbiddenError, TelegramBadRequest) as e:
         log.warning("Mijozga yuborib bo'lmadi %s: %s", order["user_id"], e)
@@ -73,21 +65,83 @@ async def refresh_staff_messages(bot: Bot, order_id: int) -> None:
             pass
 
 
+def customer_status_text(order: dict, lang: str, cafe_address: str = "") -> str | None:
+    status, otype = order["status"], order.get("order_type") or "delivery"
+    if status not in ("accepted", "cooking", "delivering", "delivered", "cancelled"):
+        return None
+    key = f"st_{status}"
+    if otype == "pickup" and status in ("delivering", "delivered"):
+        key += "_pickup"
+    reason = ""
+    if status == "cancelled" and order.get("cancel_reason"):
+        reason = "\n" + t("reason", lang, reason=h(order["cancel_reason"]))
+    address = f"\n📍 {h(cafe_address)}" if cafe_address else ""
+    return t(key, lang, code=order["code"], reason=reason, address=address)
+
+
 async def notify_status_change(bot: Bot, order_id: int) -> None:
     order = await db.get_order(order_id)
     await refresh_staff_messages(bot, order_id)
-    template = CUSTOMER_TEXTS.get(order["status"])
-    if not template:
+    lang = await lang_of(order["user_id"])
+    text = customer_status_text(order, lang, await db.get_setting("cafe_address"))
+    if not text:
         return
-    reason = f"\nSabab: {order['cancel_reason']}" if order.get("cancel_reason") else ""
     try:
-        await bot.send_message(
-            order["user_id"],
-            template.format(code=order['code'], reason=reason),
-            reply_markup=order_track_kb(order["code"]),
-        )
+        await bot.send_message(order["user_id"], text, reply_markup=order_track_kb(order["code"], lang))
+        if order["status"] == "delivered" and not await db.get_review(order_id):
+            await bot.send_message(order["user_id"], t("rate_ask", lang), reply_markup=rating_kb(order_id))
     except (TelegramForbiddenError, TelegramBadRequest) as e:
         log.warning("Mijozga holat yuborilmadi %s: %s", order["user_id"], e)
+
+
+async def notify_review(bot: Bot, order_id: int) -> None:
+    """Yangi baho haqida menejerlarga xabar (past baholar ajratib ko'rsatiladi)."""
+    review = await db.get_review(order_id)
+    order = await db.get_order(order_id)
+    if not review or not order:
+        return
+    head = "⚠️ <b>PAST BAHO!</b>" if review["rating"] <= 3 else "⭐ <b>Yangi baho</b>"
+    text = (
+        f"{head}\n\n{'⭐' * review['rating']}{'☆' * (5 - review['rating'])} ({review['rating']}/5)\n"
+        f"Buyurtma: <code>{order['code']}</code>\n👤 {h(order['customer_name'])} · {h(order['phone'])}"
+    )
+    if review["comment"]:
+        text += f"\n💬 {h(review['comment'])}"
+    managers = set(config.admin_ids) | {u["id"] for u in await db.get_staff() if u["role"] == "manager"}
+    for chat_id in managers:
+        try:
+            await bot.send_message(chat_id, text)
+        except (TelegramForbiddenError, TelegramBadRequest):
+            pass
+
+
+async def remind_scheduled(bot: Bot) -> None:
+    """Vaqtga buyurtmalar uchun xodimlarga eslatma (tayyorlash vaqti yaqinlashganda)."""
+    from datetime import timedelta
+
+    from .utils import now
+
+    prep = int(await db.get_setting("prep_time") or 40)
+    until = (now() + timedelta(minutes=prep + 10)).strftime("%Y-%m-%d %H:%M")
+    for order in await db.due_scheduled_orders(until):
+        await db.mark_reminded(order["id"])
+        items = await db.get_order_items(order["id"])
+        text = "⏰ <b>ESLATMA: vaqtga buyurtmani tayyorlash vaqti!</b>\n\n" + format_order(order, items)
+        for chat_id in await staff_recipients():
+            try:
+                msg = await bot.send_message(chat_id, text, reply_markup=order_staff_kb(order))
+                await db.save_order_message(order["id"], chat_id, msg.message_id)
+            except (TelegramForbiddenError, TelegramBadRequest):
+                pass
+
+
+async def scheduler_loop(bot: Bot) -> None:
+    while True:
+        try:
+            await remind_scheduled(bot)
+        except Exception:
+            log.exception("Eslatma xatosi")
+        await asyncio.sleep(60)
 
 
 async def send_post(bot: Bot, chat_id: int, from_chat_id: int, message_ids: list[int],

@@ -21,13 +21,16 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-from .. import db
-from ..config import config
-from ..keyboards import B, cancel_kb, ikb, main_kb, manager_kb
+from .. import db, hours
 from ..backup import send_backup
+from ..catalog import BADGES, badges_of, discount_active
+from ..config import config
+from ..i18n import t
+from ..keyboards import B, cancel_kb, ikb, main_kb, manager_kb
 from ..notify import broadcast, send_post
-from ..roles import IsManager
-from ..utils import PAYMENT_LABELS, STATUS_LABELS, h, money, now
+from ..orders import public_settings
+from ..roles import IsManager, lang_of
+from ..utils import PAYMENT_LABELS, STATUS_LABELS, TYPE_LABELS, fmt_dt, h, money, now, status_label
 
 router = Router(name="admin")
 router.message.filter(IsManager)
@@ -84,11 +87,10 @@ async def cancel(message: Message, state: FSMContext) -> None:
 async def panel(message: Message, state: FSMContext) -> None:
     await state.clear()
     s = await db.stats(now().strftime("%Y-%m-%d 00:00:00"))
-    settings = await db.get_settings()
     active = len(await db.get_active_orders())
     await message.answer(
         "👑 <b>Menejer paneli</b>\n\n"
-        f"Holat: {'🟢 Ochiq — buyurtma qabul qilinmoqda' if settings['is_open'] == '1' else '🔴 Yopiq'}\n\n"
+        f"Holat: {await _status_line()}\n\n"
         "<b>Bugun:</b>\n"
         f"📦 Buyurtmalar: <b>{s['total_orders']}</b> (faol: {active})\n"
         f"💰 Tushum: <b>{money(s['revenue'])}</b>\n"
@@ -96,6 +98,16 @@ async def panel(message: Message, state: FSMContext) -> None:
         f"👥 Jami foydalanuvchilar: <b>{s['users_total']}</b>",
         reply_markup=manager_kb(),
     )
+
+
+async def _status_line() -> str:
+    raw = await db.get_settings()
+    s = public_settings(raw)
+    mode = {"auto": "🕒 Jadval bo'yicha", "open": "🟢 Doim ochiq", "closed": "🔴 To'xtatilgan"}[s["mode"]]
+    now_state = "🟢 hozir ochiq" if s["is_open"] else "🔴 hozir yopiq"
+    if s["mode"] == "auto" and not s["is_open"] and s["next_open"]:
+        now_state += f" (ochiladi: {s['next_open']})"
+    return f"{mode} — {now_state}" if s["mode"] == "auto" else mode
 
 
 # ====================== statistika ======================
@@ -133,6 +145,14 @@ async def _stats_text(period: str) -> str:
     for st in ("new", "accepted", "cooking", "delivering", "delivered", "cancelled"):
         if bs.get(st):
             lines.append(f"   {STATUS_LABELS[st]}: {bs[st]}")
+    bt = s["by_type"]
+    if bt:
+        lines.append(f"   🛵 Yetkazish: {bt.get('delivery', 0)} · 🏃 Olib ketish: {bt.get('pickup', 0)}")
+    if s["promo_sum"]:
+        lines.append(f"🎁 Promo-kod chegirmalari: {money(s['promo_sum'])}")
+    r = s["rating"]
+    if r["count"]:
+        lines.append(f"⭐ O'rtacha baho: <b>{r['avg']}</b> / 5 ({r['count']} ta baho)")
     lines += [
         "",
         f"🙋 Buyurtma bergan mijozlar: {s['customers']}",
@@ -141,8 +161,8 @@ async def _stats_text(period: str) -> str:
     ]
     if s["top"]:
         lines.append("\n🏆 <b>Top mahsulotlar:</b>")
-        for i, t in enumerate(s["top"], 1):
-            lines.append(f"{i}. {h(t['name'])} — {t['qty']} ta ({money(t['amount'])})")
+        for i, row in enumerate(s["top"], 1):
+            lines.append(f"{i}. {h(row['name'])} — {row['qty']} ta ({money(row['amount'])})")
     staff = await db.staff_stats(since)
     if staff:
         lines.append("\n👷 <b>Xodimlar (yetkazilgan):</b>")
@@ -187,7 +207,8 @@ async def _orders_list(message: Message, kind: str, edit: bool = False) -> None:
         rows = await db.get_orders_by_status(("cancelled",), limit=20)
         title = "❌ Oxirgi bekor qilinganlar"
     buttons = [
-        [(f"{o['code']} · {STATUS_LABELS[o['status']].split(' ', 1)[1]} · {money(o['total'])}", f"ov:{o['id']}")]
+        [(f"{'🏃' if o['order_type'] == 'pickup' else '🛵'}{'⏰' if o['scheduled_at'] else ''} {o['code']} · "
+          f"{status_label(o['status'], o['order_type']).split(' ', 1)[1]} · {money(o['total'])}", f"ov:{o['id']}")]
         for o in rows[:30]
     ]
     buttons.append([("🔄 Faol", "ol:active"), ("🎉 Yetkazilgan", "ol:done"), ("❌ Bekor", "ol:cancel")])
@@ -220,12 +241,14 @@ async def export_period(call: CallbackQuery) -> None:
     rows = await db.all_orders_for_export(_since(period))
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    w.writerow(["Buyurtma ID", "Sana", "Holat", "Mijoz", "Telefon", "Manzil", "Mahsulotlar",
-                "Summa", "Yetkazish", "Jami", "To'lov", "Xodim", "Izoh"])
+    w.writerow(["Buyurtma ID", "Sana", "Turi", "Vaqtga", "Holat", "Mijoz", "Telefon", "Manzil", "Mahsulotlar",
+                "Summa", "Promo-kod", "Chegirma", "Yetkazish", "Jami", "To'lov", "Xodim", "Izoh"])
     for o in rows:
         w.writerow([
-            o["code"], o["created_at"], STATUS_LABELS[o["status"]].split(" ", 1)[1], o["customer_name"],
-            o["phone"], o["address"], o["items"], o["subtotal"], o["delivery_fee"], o["total"],
+            o["code"], o["created_at"], TYPE_LABELS.get(o["order_type"], "").split(" ", 1)[1], o["scheduled_at"],
+            status_label(o["status"], o["order_type"]).split(" ", 1)[1], o["customer_name"],
+            o["phone"], o["address"], o["items"], o["subtotal"], o["promo_code"], o["discount"],
+            o["delivery_fee"], o["total"],
             PAYMENT_LABELS.get(o["payment_method"], ""), o["staff_name"] or "", o["comment"] or "",
         ])
     data = ("\ufeff" + buf.getvalue()).encode("utf-8")  # BOM — Excel to'g'ri ochishi uchun
@@ -307,7 +330,7 @@ async def user_find(message: Message, state: FSMContext) -> None:
     ]
     if last:
         lines.append("\nOxirgi buyurtmalar:")
-        lines += [f"{o['code']} — {money(o['total'])} — {STATUS_LABELS[o['status']]}" for o in last]
+        lines += [f"{o['code']} — {money(o['total'])} — {status_label(o['status'], o['order_type'])}" for o in last]
     await message.answer("\n".join(lines), reply_markup=manager_kb())
 
 
@@ -566,30 +589,48 @@ async def staff_remove(call: CallbackQuery, bot: Bot) -> None:
 
 SETTING_PROMPTS = {
     "delivery_fee": "🚚 Yetkazib berish narxini yuboring (so'mda, 0 — bepul):",
-    "min_order": "🧾 Minimal buyurtma summasini yuboring (so'mda, 0 — cheklovsiz):",
+    "min_order": "🧾 Yetkazib berish uchun minimal buyurtma summasini yuboring (so'mda, 0 — cheklovsiz):",
     "phone": "📞 Kafe telefon raqamini yuboring:",
-    "work_hours": "🕒 Ish vaqtini yuboring (masalan: 10:00 - 23:00):",
+    "cafe_address": "📍 Kafe manzilini yuboring (olib ketish uchun mijozlarga ko'rsatiladi):",
+    "prep_time": "⏱ Vaqtga buyurtma uchun minimal tayyorlash vaqtini yuboring (daqiqada, masalan 40):",
+    "slot_step": "⏲ Vaqt tanlash qadamini yuboring (daqiqada: 15, 20, 30 yoki 60):",
 }
+NUMERIC_SETTINGS = {"delivery_fee", "min_order", "prep_time", "slot_step"}
+MODES = ["auto", "open", "closed"]
+MODE_LABELS = {"auto": "🕒 Jadval bo'yicha (avtomatik)", "open": "🟢 Doim ochiq", "closed": "🔴 To'xtatilgan"}
 
 
 async def _settings_view() -> tuple[str, list]:
     s = await db.get_settings()
-    is_open = s["is_open"] == "1"
+    yes = lambda key: s.get(key, "1") == "1"  # noqa: E731
+    fee, min_order = int(s["delivery_fee"] or 0), int(s["min_order"] or 0)
     text = (
         "⚙️ <b>Sozlamalar</b>\n\n"
-        f"Buyurtma qabul qilish: {'🟢 Ochiq' if is_open else '🔴 Yopiq'}\n"
-        f"🚚 Yetkazib berish: {money(s['delivery_fee']) if int(s['delivery_fee']) else 'bepul'}\n"
-        f"🧾 Minimal buyurtma: {money(s['min_order']) if int(s['min_order']) else 'cheklovsiz'}\n"
-        f"📞 Telefon: {h(s['phone'] or '-')}\n"
-        f"🕒 Ish vaqti: {h(s['work_hours'])}\n"
+        f"Holat: {await _status_line()}\n"
+        f"🗓 Ish jadvali: {h(hours.schedule_summary(s))}\n\n"
+        f"🛵 Yetkazib berish: {'✅ yoqilgan' if yes('delivery_enabled') else '❌ o`chirilgan'}\n"
+        f"   Narxi: {money(fee) if fee else 'bepul'} · Minimal: {money(min_order) if min_order else 'cheklovsiz'}\n"
+        f"🏃 Olib ketish: {'✅ yoqilgan' if yes('pickup_enabled') else '❌ o`chirilgan'}\n"
+        f"📍 Kafe manzili: {h(s.get('cafe_address') or '-')}\n"
+        f"📞 Telefon: {h(s.get('phone') or '-')}\n"
+        f"⏱ Vaqtga buyurtma: kamida {s.get('prep_time')} daqiqa oldin, har {s.get('slot_step')} daqiqada\n"
         "💳 Karta orqali to'lov: tez kunda"
     )
     buttons = [
-        [("🔴 Buyurtmalarni to'xtatish" if is_open else "🟢 Buyurtmalarni ochish", "set:toggle")],
+        [("Rejim: " + MODE_LABELS[s.get("mode") or "auto"] + " 🔁", "set:mode")],
+        [("🗓 Ish jadvalini sozlash", "sch:view")],
+        [(("✅" if yes("delivery_enabled") else "❌") + " Yetkazib berish", "set:tgl:delivery_enabled"),
+         (("✅" if yes("pickup_enabled") else "❌") + " Olib ketish", "set:tgl:pickup_enabled")],
         [("🚚 Yetkazish narxi", "set:delivery_fee"), ("🧾 Minimal summa", "set:min_order")],
-        [("📞 Telefon", "set:phone"), ("🕒 Ish vaqti", "set:work_hours")],
+        [("📍 Kafe manzili", "set:cafe_address"), ("📞 Telefon", "set:phone")],
+        [("⏱ Tayyorlash vaqti", "set:prep_time"), ("⏲ Vaqt qadami", "set:slot_step")],
     ]
     return text, buttons
+
+
+async def _refresh_settings(call: CallbackQuery) -> None:
+    text, buttons = await _settings_view()
+    await call.message.edit_text(text, reply_markup=ikb(buttons))
 
 
 @router.message(StateFilter(None), F.text == B.SETTINGS)
@@ -598,18 +639,35 @@ async def settings(message: Message) -> None:
     await message.answer(text, reply_markup=ikb(buttons))
 
 
-@router.callback_query(F.data == "set:toggle")
+@router.callback_query(F.data == "set:mode")
+async def settings_mode(call: CallbackQuery) -> None:
+    cur = await db.get_setting("mode") or "auto"
+    new = MODES[(MODES.index(cur) + 1) % len(MODES)] if cur in MODES else "auto"
+    await db.set_setting("mode", new)
+    await _refresh_settings(call)
+    await call.answer(MODE_LABELS[new])
+
+
+@router.callback_query(F.data.startswith("set:tgl:"))
 async def settings_toggle(call: CallbackQuery) -> None:
-    cur = await db.get_setting("is_open")
-    await db.set_setting("is_open", "0" if cur == "1" else "1")
-    text, buttons = await _settings_view()
-    await call.message.edit_text(text, reply_markup=ikb(buttons))
+    key = call.data.split(":")[2]
+    s = await db.get_settings()
+    new = "0" if s.get(key, "1") == "1" else "1"
+    other = "pickup_enabled" if key == "delivery_enabled" else "delivery_enabled"
+    if new == "0" and s.get(other, "1") != "1":
+        await call.answer("Kamida bittasi (yetkazish yoki olib ketish) yoqilgan bo'lishi kerak", show_alert=True)
+        return
+    await db.set_setting(key, new)
+    await _refresh_settings(call)
     await call.answer("Saqlandi")
 
 
 @router.callback_query(F.data.startswith("set:"))
 async def settings_edit(call: CallbackQuery, state: FSMContext) -> None:
     key = call.data.split(":")[1]
+    if key not in SETTING_PROMPTS:
+        await call.answer()
+        return
     await state.set_state(EditSetting.value)
     await state.update_data(key=key)
     await call.message.answer(SETTING_PROMPTS[key], reply_markup=cancel_kb())
@@ -620,13 +678,19 @@ async def settings_edit(call: CallbackQuery, state: FSMContext) -> None:
 async def settings_save(message: Message, state: FSMContext) -> None:
     key = (await state.get_data())["key"]
     value = message.text.strip()
-    if key in ("delivery_fee", "min_order"):
+    if key in NUMERIC_SETTINGS:
         digits = re.sub(r"\D", "", value)
         if not digits:
             await message.answer("Faqat raqam yuboring, masalan: 10000")
             return
         value = str(int(digits))
-    await db.set_setting(key, value)
+        if key == "slot_step" and not 10 <= int(value) <= 120:
+            await message.answer("Qadam 10 dan 120 daqiqagacha bo'lsin")
+            return
+        if key == "prep_time" and not 10 <= int(value) <= 600:
+            await message.answer("Tayyorlash vaqti 10 dan 600 daqiqagacha bo'lsin")
+            return
+    await db.set_setting(key, value[:200])
     await state.clear()
     await message.answer("✅ Saqlandi", reply_markup=manager_kb())
     text, buttons = await _settings_view()
@@ -701,6 +765,7 @@ async def _category_view(cat_id: int) -> tuple[str, list]:
         for p in products
     ]
     buttons.append([("➕ Mahsulot qo'shish", f"padd:{cat_id}")])
+    buttons.append([("🇷🇺 Ruscha nom" + (f": {cat['name_ru']}" if cat.get("name_ru") else ""), f"cru:{cat_id}")])
     buttons.append([
         ("✏️ Nomi / emoji", f"cren:{cat_id}"),
         ("🙈 Yashirish" if cat["is_active"] else "👁 Ko'rsatish", f"ctg:{cat_id}"),
@@ -802,6 +867,30 @@ async def category_add(message: Message, state: FSMContext) -> None:
     await message.answer(text, reply_markup=ikb(buttons))
 
 
+class CategoryRu(StatesGroup):
+    name = State()
+
+
+@router.callback_query(F.data.startswith("cru:"))
+async def category_ru_start(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(CategoryRu.name)
+    await state.update_data(cat_id=int(call.data.split(":")[1]))
+    await call.message.answer("🇷🇺 Kategoriyaning ruscha nomini yuboring (o'chirish uchun «-»):",
+                              reply_markup=cancel_kb())
+    await call.answer()
+
+
+@router.message(CategoryRu.name, F.text)
+async def category_ru_save(message: Message, state: FSMContext) -> None:
+    cat_id = (await state.get_data())["cat_id"]
+    value = "" if message.text.strip() == "-" else message.text.strip()[:40]
+    await db.execute("UPDATE categories SET name_ru = ? WHERE id = ?", value, cat_id)
+    await state.clear()
+    await message.answer("✅ Saqlandi", reply_markup=manager_kb())
+    text, buttons = await _category_view(cat_id)
+    await message.answer(text, reply_markup=ikb(buttons))
+
+
 @router.callback_query(F.data.startswith("cren:"))
 async def category_rename_start(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(RenameCategory.name)
@@ -824,10 +913,23 @@ async def category_rename(message: Message, state: FSMContext) -> None:
 # ---------- mahsulot kartasi ----------
 
 def _product_caption(p: dict, cat: dict | None) -> str:
+    badges = ", ".join(BADGES[b]["uz"] for b in badges_of(p)) or "-"
+    pct = discount_active(p)
+    if pct:
+        until = f" ({fmt_dt(p['discount_until'])} gacha)" if p.get("discount_until") else " (muddatsiz)"
+        discount = f"-{pct}%{until}"
+    elif p.get("discount_percent"):
+        discount = "muddati tugagan"
+    else:
+        discount = "-"
     return (
         f"<b>{h(p['name'])}</b>\n"
         f"{h(p['description'])}\n\n"
+        f"🇷🇺 {h(p.get('name_ru') or '— (ruscha nom yo`q)')}\n"
+        f"<i>{h(p.get('description_ru') or '')}</i>\n\n"
         f"💰 {h(variants_text(p['variants']))}\n"
+        f"💸 Chegirma: {discount}\n"
+        f"🏷 Belgilar: {badges}\n"
         f"📂 {h(cat['name']) if cat else '-'}\n"
         f"Holat: {'✅ Sotuvda' if p['is_available'] else '🚫 Sotuvda yo`q'}"
     )
@@ -837,11 +939,49 @@ def _product_buttons(p: dict) -> list:
     pid = p["id"]
     return [
         [("✏️ Nomi", f"pe:{pid}:name"), ("📝 Tavsif", f"pe:{pid}:description")],
-        [("💰 Narx", f"pe:{pid}:variants"), ("🖼 Rasm", f"pe:{pid}:image")],
+        [("🇷🇺 Ruscha nom", f"pe:{pid}:name_ru"), ("🇷🇺 Ruscha tavsif", f"pe:{pid}:description_ru")],
+        [("💰 Narx", f"pe:{pid}:variants"), ("💸 Chegirma", f"pe:{pid}:discount")],
+        [("🏷 Belgilar (Hit/Yangi/Top)", f"pbg:{pid}"), ("🖼 Rasm", f"pe:{pid}:image")],
         [("🚫 Sotuvdan olish" if p["is_available"] else "✅ Sotuvga qo'yish", f"ptg:{pid}"),
          ("📂 Kategoriya", f"pcat:{pid}")],
         [("🗑 O'chirish", f"pdl:{pid}"), ("⬅️ Ortga", f"cat:{p['category_id']}")],
     ]
+
+
+async def _refresh_product_card(call: CallbackQuery, pid: int) -> None:
+    p = await db.get_product(pid)
+    caption = _product_caption(p, await db.get_category(p["category_id"]))
+    if call.message.photo:
+        await call.message.edit_caption(caption=caption, reply_markup=ikb(_product_buttons(p)))
+    else:
+        await call.message.edit_text(caption, reply_markup=ikb(_product_buttons(p)))
+
+
+@router.callback_query(F.data.startswith("pbg:"))
+async def product_badges(call: CallbackQuery) -> None:
+    pid = int(call.data.split(":")[1])
+    p = await db.get_product(pid)
+    current = badges_of(p)
+    rows = [[(("✅ " if b in current else "▫️ ") + BADGES[b]["uz"], f"pbt:{pid}:{b}")] for b in BADGES]
+    rows.append([("✔️ Tayyor", f"pbd:{pid}")])
+    await call.message.edit_reply_markup(reply_markup=ikb(rows))
+    await call.answer("Belgilarni yoqing yoki o'chiring")
+
+
+@router.callback_query(F.data.startswith("pbt:"))
+async def product_badge_toggle(call: CallbackQuery) -> None:
+    _, pid, badge = call.data.split(":")
+    p = await db.get_product(int(pid))
+    current = badges_of(p)
+    current = [b for b in current if b != badge] if badge in current else current + [badge]
+    await db.update_product(int(pid), badges=",".join(current))
+    await product_badges(call)
+
+
+@router.callback_query(F.data.startswith("pbd:"))
+async def product_badges_done(call: CallbackQuery) -> None:
+    await _refresh_product_card(call, int(call.data.split(":")[1]))
+    await call.answer("Saqlandi")
 
 
 def _image_input(image: str):
@@ -879,12 +1019,7 @@ async def product_toggle(call: CallbackQuery) -> None:
     pid = int(call.data.split(":")[1])
     p = await db.get_product(pid)
     await db.update_product(pid, is_available=0 if p["is_available"] else 1)
-    p = await db.get_product(pid)
-    caption = _product_caption(p, await db.get_category(p["category_id"]))
-    if call.message.photo:
-        await call.message.edit_caption(caption=caption, reply_markup=ikb(_product_buttons(p)))
-    else:
-        await call.message.edit_text(caption, reply_markup=ikb(_product_buttons(p)))
+    await _refresh_product_card(call, pid)
     await call.answer("Saqlandi")
 
 
@@ -934,8 +1069,43 @@ EDIT_PROMPTS = {
     "description": "Yangi tavsifni yuboring (tarkibi, og'irligi va h.k.):",
     "variants": "Yangi narxni yuboring.\n\nBitta narx: <code>25000</code>\n"
                 "O'lchamlar bilan (har biri yangi qatorda):\n<code>O'rta 15000\nKatta 20000</code>",
-    "image": "Yangi rasmni yuboring (rasm sifatida, fayl emas):",
+    "image": "Yangi rasmni yuboring (rasm sifatida, fayl emas).\n\n"
+             "📐 Ideal: 4:3 nisbat (masalan 1200×900), JPG, mahsulot markazda, bir xil fon.",
+    "name_ru": "🇷🇺 Mahsulotning ruscha nomini yuboring (o'chirish uchun «-»):",
+    "description_ru": "🇷🇺 Ruscha tavsifni yuboring (o'chirish uchun «-»):",
+    "discount": "💸 Chegirma foizini yuboring.\n\n"
+                "<code>20</code> — 20% muddatsiz\n"
+                "<code>20 7</code> — 20%, 7 kun davomida\n"
+                "<code>15 31.12.2026</code> — 15%, shu sanagacha\n"
+                "<code>0</code> — chegirmani olib tashlash\n\n"
+                "Mijozlarga eski narx chizilgan, yangisi ajratib ko'rsatiladi.",
 }
+
+
+def parse_discount(text: str) -> tuple[int, str] | None:
+    """'20' | '20 7' (kun) | '20 31.12.2026' -> (foiz, tugash 'YYYY-MM-DD HH:MM:SS' yoki '')."""
+    parts = text.replace("%", " ").split()
+    if not parts or not parts[0].isdigit():
+        return None
+    pct = int(parts[0])
+    if not 0 <= pct <= 95:
+        return None
+    if pct == 0 or len(parts) == 1:
+        return pct, ""
+    arg = parts[1]
+    if arg.isdigit():
+        until = now() + timedelta(days=int(arg))
+        return pct, until.strftime("%Y-%m-%d 23:59:59")
+    m = re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$", arg)
+    if not m:
+        return None
+    d, mo, y = map(int, m.groups())
+    try:
+        from datetime import date
+        date(y, mo, d)
+    except ValueError:
+        return None
+    return pct, f"{y:04d}-{mo:02d}-{d:02d} 23:59:59"
 
 
 @router.callback_query(F.data.startswith("pe:"))
@@ -972,8 +1142,22 @@ async def product_edit_save(message: Message, state: FSMContext, bot: Bot) -> No
             await message.answer("❗️ Narx formati noto'g'ri. Masalan: <code>25000</code> yoki "
                                  "<code>O'rta 15000</code> (har bir o'lcham yangi qatorda).")
             return
+    elif field == "discount":
+        parsed = parse_discount(message.text)
+        if not parsed:
+            await message.answer("❗️ Format noto'g'ri. Masalan: <code>20</code>, <code>20 7</code> yoki "
+                                 "<code>15 31.12.2026</code>")
+            return
+        await db.update_product(pid, discount_percent=parsed[0], discount_until=parsed[1])
+        await state.clear()
+        await message.answer("✅ Saqlandi", reply_markup=manager_kb())
+        await send_product_card(message, pid)
+        return
     else:
-        value = message.text.strip()[:500 if field == "description" else 60]
+        value = message.text.strip()
+        if field in ("name_ru", "description_ru") and value == "-":
+            value = ""
+        value = value[:500 if field.startswith("description") else 60]
     await db.update_product(pid, **{field: value})
     await state.clear()
     await message.answer("✅ Saqlandi", reply_markup=manager_kb())
@@ -1038,7 +1222,7 @@ async def product_add_photo(message: Message, state: FSMContext, bot: Bot) -> No
 async def reply_to_customer(message: Message, bot: Bot) -> None:
     uid = int(re.search(r"#u(\d+)", message.reply_to_message.text).group(1))
     try:
-        await bot.send_message(uid, "💬 <b>Yaproq go'sht javobi:</b>")
+        await bot.send_message(uid, t("reply_from_cafe", await lang_of(uid)))
         await bot.copy_message(uid, message.chat.id, message.message_id)
         await message.reply("✅ Javob yuborildi")
     except Exception:

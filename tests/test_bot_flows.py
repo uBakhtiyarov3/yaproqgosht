@@ -49,14 +49,15 @@ async def env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "admin_ids", {ADMIN})
     monkeypatch.setattr(config, "uploads_dir", tmp_path / "uploads")
     # modul darajasidagi routerlarni har testda qayta ulash uchun ajratamiz
-    from app.handlers import admin, common, shop, staff
-    for r in (shop.router, admin.router, staff.router, common.router, common.fallback_router):
+    from app.handlers import admin, admin_extra, common, shop, staff
+    for r in (shop.router, admin.router, admin_extra.router, staff.router, common.router, common.fallback_router):
         r._parent_router = None
     session = FakeSession()
     bot = Bot("42:TEST", session=session, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher()
     dp.include_router(setup_routers())
     await db.init_db(str(tmp_path / "bot.db"))
+    await db.set_setting("mode", "open")
     yield bot, dp, session
     await db.close_db()
 
@@ -83,7 +84,13 @@ async def test_start_creates_account(env):
     bot, dp, s = env
     await send(bot, dp, CUSTOMER, "/start")
     assert await db.get_user(CUSTOMER)
-    assert any("akkaunt avtomatik ochildi" in t for t in s.texts(CUSTOMER))
+    assert any("Tilni tanlang" in t for t in s.texts(CUSTOMER))
+    await click(bot, dp, CUSTOMER, "lang:ru")
+    assert (await db.get_user(CUSTOMER))["lang"] == "ru"
+    assert any("автоматически создан" in t for t in s.texts(CUSTOMER))
+    s.calls.clear()
+    await send(bot, dp, CUSTOMER, "📋 Меню")
+    assert any("Хотдоги" in str(getattr(c, "reply_markup", "")) for c in s.calls)
 
 
 async def test_full_order_lifecycle(env):
@@ -125,12 +132,13 @@ async def test_full_order_lifecycle(env):
 async def test_manager_screens(env):
     bot, dp, s = env
     for text in ("/admin", "📊 Statistika", "📦 Barcha buyurtmalar", "🍔 Menyuni boshqarish",
-                 "👥 Xodimlar", "⚙️ Sozlamalar", "🙋 Mijozlar", "👷 Xodim kabineti",
+                 "👥 Xodimlar", "⚙️ Sozlamalar", "🙋 Mijozlar", "🎁 Promo-kodlar", "⭐ Baholar", "👷 Xodim kabineti",
                  "🆕 Yangi buyurtmalar", "📈 Bugungi natija"):
         await send(bot, dp, ADMIN, text)
-    for data in ("st:week", "st:all", "ol:done", "cat:1", "pr:1", "ptg:1", "ex:all", "set:toggle"):
+    for data in ("st:week", "st:all", "ol:done", "cat:1", "pr:1", "ptg:1", "ex:all", "set:mode", "sch:view", "pbg:1", "pbt:1:hit"):
         await click(bot, dp, ADMIN, data)
-    assert (await db.get_setting("is_open")) == "0"
+    assert (await db.get_setting("mode")) == "closed"
+    assert (await db.get_product(1))["badges"] == "hit"
     assert (await db.get_product(1))["is_available"] == 0
     # oddiy mijoz menejer panelini ko'ra olmaydi
     s.calls.clear()
@@ -247,11 +255,14 @@ async def test_shop_order_in_bot(env):
     assert any("40 000 so'm" in t for t in s.texts(CUSTOMER))
 
     await click(bot, dp, CUSTOMER, "sh:co")
+    await click(bot, dp, CUSTOMER, "sh:ot:delivery")
     await send(bot, dp, CUSTOMER, "Ali Valiyev")
     await send(bot, dp, CUSTOMER, "12345")                       # noto'g'ri
     await send(bot, dp, CUSTOMER, None, contact=Contact(phone_number="998998081212", first_name="Ali"))
     await send(bot, dp, CUSTOMER, None, location=Location(latitude=41.31, longitude=69.24))
+    await click(bot, dp, CUSTOMER, "sh:tm:asap")
     await send(bot, dp, CUSTOMER, "Domofon 25")
+    await send(bot, dp, CUSTOMER, "➡️ O'tkazib yuborish")        # promo-kodsiz
     await click(bot, dp, CUSTOMER, "sh:pay:card")                # tez kunda
     await click(bot, dp, CUSTOMER, "sh:pay:cash")
     s.calls.clear()
@@ -292,3 +303,96 @@ async def test_backup(env):
     doc = next(c for c in s.calls if type(c).__name__ == "SendDocument")
     zf = zipfile.ZipFile(io.BytesIO(doc.document.data))
     assert "data/bot.db" in zf.namelist()
+
+
+async def test_bot_pickup_scheduled_promo_and_rating(env):
+    import json as _json
+    from app import hours
+    bot, dp, s = env
+    await db.set_setting("mode", "auto")
+    await db.set_setting("schedule", _json.dumps({d: ["00:00", "23:59"] for d in hours.DAYS}))
+    await db.set_setting("cafe_address", "Chilonzor 5")
+    await db.add_promo(code="TEN", kind="percent", value=10)
+    await send(bot, dp, STAFF, "/start")
+    await db.set_role(STAFF, "staff")
+    await click(bot, dp, CUSTOMER, "sh:add:9:0:2")      # 2 ta burger = 50 000
+    await click(bot, dp, CUSTOMER, "sh:co")
+    await click(bot, dp, CUSTOMER, "sh:ot:pickup")
+    await send(bot, dp, CUSTOMER, "Vali")
+    await send(bot, dp, CUSTOMER, "+998 90 111 22 33")    # manzil so'ralmaydi (pickup)
+    slots = hours.slots(await db.get_settings())
+    day_idx = len(slots) - 1
+    await click(bot, dp, CUSTOMER, f"sh:td:{day_idx}")
+    value = slots[day_idx]["times"][0]["value"]
+    await click(bot, dp, CUSTOMER, "sh:tt:" + value.replace("-", "").replace(" ", "").replace(":", ""))
+    await send(bot, dp, CUSTOMER, "Piyozsiz bo'lsin")
+    await send(bot, dp, CUSTOMER, "XATO")                  # noto'g'ri promo -> qayta so'raydi
+    assert any("topilmadi" in t for t in s.texts(CUSTOMER))
+    await send(bot, dp, CUSTOMER, "ten")
+    await click(bot, dp, CUSTOMER, "sh:pay:cash")
+    assert any("Chilonzor 5" in t for t in s.texts(CUSTOMER))
+    s.calls.clear()
+    await click(bot, dp, CUSTOMER, "sh:ok")
+    o = (await db.get_user_orders(CUSTOMER))[0]
+    assert o["order_type"] == "pickup" and o["scheduled_at"] == value and o["promo_code"] == "TEN"
+    assert o["discount"] == 5000 and o["total"] == 45000 and o["comment"] == "Piyozsiz bo'lsin"
+    staff_text = next(t for t in s.texts(STAFF) if "YANGI BUYURTMA" in t)
+    assert "Olib ketish" in staff_text and "VAQTGA" in staff_text and "Piyozsiz" in staff_text
+
+    # xodim: pickup holatlari
+    for st in ("accepted", "cooking", "delivering", "delivered"):
+        await click(bot, dp, STAFF, f"ost:{o['id']}:{st}")
+    assert any("olib ketishingiz mumkin" in t.lower() for t in s.texts(CUSTOMER))
+    assert any("baholang" in t.lower() for t in s.texts(CUSTOMER))
+    # baho + izoh
+    s.calls.clear()
+    await click(bot, dp, CUSTOMER, f"rv:{o['id']}:2")
+    await send(bot, dp, CUSTOMER, "Sovuq edi")
+    r = await db.get_review(o["id"])
+    assert r["rating"] == 2 and r["comment"] == "Sovuq edi"
+    assert any("PAST BAHO" in t for t in s.texts(ADMIN))
+    await click(bot, dp, CUSTOMER, f"rv:{o['id']}:5")       # qayta baholab bo'lmaydi
+    assert (await db.get_review(o["id"]))["rating"] == 2
+
+
+async def test_admin_promo_schedule_discount(env):
+    bot, dp, s = env
+    await send(bot, dp, ADMIN, "🎁 Promo-kodlar")
+    await click(bot, dp, ADMIN, "pm:new")
+    await send(bot, dp, ADMIN, "bahor 2026")                 # bo'sh joy — noto'g'ri
+    await send(bot, dp, ADMIN, "bahor26")
+    await click(bot, dp, ADMIN, "pmk:percent")
+    await send(bot, dp, ADMIN, "150")                        # >100 — noto'g'ri
+    await send(bot, dp, ADMIN, "15")
+    p = await db.get_promo_by_code("BAHOR26")
+    assert p["kind"] == "percent" and p["value"] == 15
+    await click(bot, dp, ADMIN, f"pm:e:{p['id']}:ends_at")
+    await send(bot, dp, ADMIN, "7")
+    await click(bot, dp, ADMIN, f"pm:e:{p['id']}:usage_limit")
+    await send(bot, dp, ADMIN, "100")
+    await click(bot, dp, ADMIN, f"pm:fo:{p['id']}")
+    p = await db.get_promo(p["id"])
+    assert p["ends_at"] and p["usage_limit"] == 100 and p["first_order_only"] == 1
+    await click(bot, dp, ADMIN, f"pm:tg:{p['id']}")
+    assert (await db.get_promo(p["id"]))["is_active"] == 0
+
+    await click(bot, dp, ADMIN, "sch:d:sun")
+    await send(bot, dp, ADMIN, "dam")
+    await click(bot, dp, ADMIN, "sch:d:mon")
+    await send(bot, dp, ADMIN, "18:00-02:00")
+    from app import hours
+    sch = hours.load_schedule(await db.get_settings())
+    assert sch["sun"] is None and sch["mon"] == ["18:00", "02:00"]
+
+    await click(bot, dp, ADMIN, "pe:1:discount")
+    await send(bot, dp, ADMIN, "25 3")
+    prod = await db.get_product(1)
+    assert prod["discount_percent"] == 25 and prod["discount_until"]
+    await click(bot, dp, ADMIN, "pe:1:name_ru")
+    await send(bot, dp, ADMIN, "Хотдог классика")
+    assert (await db.get_product(1))["name_ru"] == "Хотдог классика"
+    await click(bot, dp, ADMIN, "set:tgl:pickup_enabled")
+    await click(bot, dp, ADMIN, "set:tgl:delivery_enabled")  # ikkalasini o'chirib bo'lmaydi
+    st = await db.get_settings()
+    assert st["pickup_enabled"] == "0" and st["delivery_enabled"] == "1"
+    await send(bot, dp, ADMIN, "⭐ Baholar")

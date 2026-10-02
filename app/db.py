@@ -97,6 +97,40 @@ CREATE TABLE IF NOT EXISTS cart_items (
     PRIMARY KEY (user_id, product_id, variant)
 );
 
+CREATE TABLE IF NOT EXISTS promo_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,                         -- percent | fixed | free_delivery
+    value INTEGER NOT NULL DEFAULT 0,
+    min_order INTEGER NOT NULL DEFAULT 0,
+    max_discount INTEGER NOT NULL DEFAULT 0,    -- 0 = cheklovsiz (foiz uchun)
+    usage_limit INTEGER NOT NULL DEFAULT 0,     -- 0 = cheklovsiz
+    per_user_limit INTEGER NOT NULL DEFAULT 1,  -- 0 = cheklovsiz
+    first_order_only INTEGER NOT NULL DEFAULT 0,
+    starts_at TEXT NOT NULL DEFAULT '',
+    ends_at TEXT NOT NULL DEFAULT '',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    rating INTEGER NOT NULL,
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+-- admin paneldan tahrirlangan bot/Mini App matnlari
+CREATE TABLE IF NOT EXISTS texts (
+    key TEXT NOT NULL,
+    lang TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (key, lang)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -108,12 +142,56 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
 """
 
+# Mavjud bazaga yangi ustunlarni qo'shish (eski o'rnatishlar ham buzilmasdan yangilanadi)
+MIGRATIONS = [
+    ("users", "lang", "TEXT NOT NULL DEFAULT ''"),
+    ("categories", "name_ru", "TEXT NOT NULL DEFAULT ''"),
+    ("products", "name_ru", "TEXT NOT NULL DEFAULT ''"),
+    ("products", "description_ru", "TEXT NOT NULL DEFAULT ''"),
+    ("products", "badges", "TEXT NOT NULL DEFAULT ''"),            # hit,new,top,spicy
+    ("products", "discount_percent", "INTEGER NOT NULL DEFAULT 0"),
+    ("products", "discount_until", "TEXT NOT NULL DEFAULT ''"),
+    ("orders", "order_type", "TEXT NOT NULL DEFAULT 'delivery'"),  # delivery | pickup
+    ("orders", "scheduled_at", "TEXT NOT NULL DEFAULT ''"),        # '' = imkon qadar tez
+    ("orders", "promo_code", "TEXT NOT NULL DEFAULT ''"),
+    ("orders", "discount", "INTEGER NOT NULL DEFAULT 0"),
+    ("orders", "lang", "TEXT NOT NULL DEFAULT 'uz'"),
+    ("orders", "reminded", "INTEGER NOT NULL DEFAULT 0"),
+]
+
 DEFAULT_SETTINGS = {
-    "is_open": "1",
+    "mode": "auto",                 # auto (jadval bo'yicha) | open | closed
+    "schedule": json.dumps({d: ["10:00", "23:00"] for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}),
     "delivery_fee": "0",
     "min_order": "0",
     "phone": "",
-    "work_hours": "10:00 - 23:00",
+    "delivery_enabled": "1",
+    "pickup_enabled": "1",
+    "cafe_address": "",
+    "prep_time": "40",              # vaqtga buyurtma uchun minimal tayyorlash vaqti (daqiqa)
+    "slot_step": "30",              # vaqt tanlash qadami (daqiqa)
+}
+
+SEED_RU_CATEGORIES = {
+    "Hot-doglar": "Хотдоги", "Frensh hot-dog": "Френч хотдог", "Burgerlar": "Бургеры",
+    "Donar va lavash": "Донар и лаваш", "Kartoshka fri": "Картошка фри",
+}
+SEED_RU_PRODUCTS = {
+    "hotdog-classic": ("Классический хотдог", "Сосиска, мягкая булочка, кетчуп и горчица"),
+    "hotdog-cheese": ("Сырный хотдог", "Сосиска, сырный соус, кетчуп"),
+    "hotdog-royal": ("Классик Рояль", "Сосиска, жареный лук, фирменный соус"),
+    "hotdog-mexican": ("Мексиканский хотдог", "Сосиска, халапеньо, острый соус"),
+    "french-jalapeno": ("Френч Халапеньо", "Хрустящая булочка, сосиска, халапеньо"),
+    "french-classic": ("Френч Классический", "Хрустящая булочка, сосиска, кетчуп"),
+    "french-tartar": ("Френч Тар-тар", "Хрустящая булочка, сосиска, соус тар-тар"),
+    "french-cheese": ("Френч Сырный", "Хрустящая булочка, сосиска, сырный соус"),
+    "burger": ("Бургер", "Говяжья котлета, помидор, лист салата, соус"),
+    "burger-cheese": ("Чизбургер", "Говяжья котлета, сыр чеддер, помидор, салат"),
+    "burger-double": ("Дабл бургер", "Две котлеты, помидор, салат, соус"),
+    "burger-double-cheese": ("Дабл чизбургер", "Две котлеты, двойной чеддер, лук, помидор"),
+    "donar": ("Донар", "Традиционный донар — мясо, овощи, соус"),
+    "lavash": ("Лаваш", "Мясо, овощи, фирменный соус, лаваш"),
+    "fries": ("Картошка фри", "Хрустящий золотистый картофель"),
 }
 
 M, L = "O'rta", "Katta"
@@ -159,10 +237,41 @@ async def init_db(path: str) -> None:
     await _db.execute("PRAGMA journal_mode=WAL")
     await _db.execute("PRAGMA foreign_keys=ON")
     await _db.executescript(SCHEMA)
+    await _migrate()
     for k, v in DEFAULT_SETTINGS.items():
         await _db.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))
     await _db.commit()
     await _seed_menu()
+    await _seed_ru()
+    await reload_texts()
+
+
+async def _migrate() -> None:
+    for table, column, ddl in MIGRATIONS:
+        cur = await db().execute(f"PRAGMA table_info({table})")
+        cols = {r[1] for r in await cur.fetchall()}
+        if column not in cols:
+            await db().execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    # eski "is_open" sozlamasi -> yangi "mode"
+    cur = await db().execute("SELECT value FROM settings WHERE key = 'is_open'")
+    old = await cur.fetchone()
+    cur = await db().execute("SELECT 1 FROM settings WHERE key = 'mode'")
+    if old and not await cur.fetchone():
+        await db().execute("INSERT INTO settings(key, value) VALUES ('mode', ?)",
+                           ("closed" if old[0] == "0" else "auto",))
+    await db().commit()
+
+
+async def _seed_ru() -> None:
+    """Boshlang'ich menyuga ruscha nomlar (faqat bo'sh bo'lsa)."""
+    for uz, ru in SEED_RU_CATEGORIES.items():
+        await db().execute("UPDATE categories SET name_ru = ? WHERE name = ? AND name_ru = ''", (ru, uz))
+    for img, (name, desc) in SEED_RU_PRODUCTS.items():
+        await db().execute(
+            "UPDATE products SET name_ru = ?, description_ru = ? WHERE image = ? AND name_ru = ''",
+            (name, desc, f"img/products/{img}.jpg"),
+        )
+    await db().commit()
 
 
 async def close_db() -> None:
@@ -239,6 +348,27 @@ async def set_setting(key: str, value) -> None:
     )
 
 
+# ---------------- matnlar ----------------
+
+async def reload_texts() -> None:
+    from .i18n import set_overrides
+
+    set_overrides(await fetchall("SELECT key, lang, value FROM texts"))
+
+
+async def set_text(key: str, lang: str, value: str | None) -> None:
+    """value=None yoki bo'sh — asl matnga qaytarish."""
+    if value:
+        await execute(
+            "INSERT INTO texts(key, lang, value, updated_at) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(key, lang) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            key, lang, value, now_str(),
+        )
+    else:
+        await execute("DELETE FROM texts WHERE key = ? AND lang = ?", key, lang)
+    await reload_texts()
+
+
 # ---------------- users ----------------
 
 async def upsert_user(user_id: int, first_name: str, last_name: str | None, username: str | None) -> tuple[dict, bool]:
@@ -274,6 +404,10 @@ async def update_user_profile(user_id: int, full_name: str, phone: str, address:
         "UPDATE users SET full_name=?, phone=?, address=? WHERE id=?",
         full_name, phone, address, user_id,
     )
+
+
+async def set_lang(user_id: int, lang: str) -> None:
+    await execute("UPDATE users SET lang=? WHERE id=?", lang, user_id)
 
 
 async def set_role(user_id: int, role: str) -> None:
@@ -344,7 +478,10 @@ async def add_product(category_id: int, name: str, description: str, image: str,
     )
 
 
-PRODUCT_FIELDS = {"name", "description", "image", "variants", "is_available", "category_id", "is_deleted"}
+PRODUCT_FIELDS = {
+    "name", "description", "image", "variants", "is_available", "category_id", "is_deleted",
+    "name_ru", "description_ru", "badges", "discount_percent", "discount_until",
+}
 
 
 async def update_product(product_id: int, **fields) -> None:
@@ -356,8 +493,10 @@ async def update_product(product_id: int, **fields) -> None:
     await db().commit()
 
 
-async def get_menu() -> list[dict]:
-    """Mini app uchun: faol kategoriyalar + mavjud mahsulotlar."""
+async def get_menu(lang: str = "uz") -> list[dict]:
+    """Mini app uchun: faol kategoriyalar + mavjud mahsulotlar (tanlangan tilda, chegirmalar bilan)."""
+    from .catalog import category_name, product_public
+
     cats = await get_categories(only_active=True)
     products = await get_products(only_available=True)
     result = []
@@ -365,11 +504,8 @@ async def get_menu() -> list[dict]:
         items = [p for p in products if p["category_id"] == c["id"]]
         if items:
             result.append({
-                "id": c["id"], "name": c["name"], "emoji": c["emoji"],
-                "products": [
-                    {k: p[k] for k in ("id", "name", "description", "image", "variants")}
-                    for p in items
-                ],
+                "id": c["id"], "name": category_name(c, lang), "emoji": c["emoji"],
+                "products": [product_public(p, lang) for p in items],
             })
     return result
 
@@ -408,10 +544,14 @@ async def cart_get(user_id: int) -> list[dict]:
             await execute("DELETE FROM cart_items WHERE user_id = ? AND product_id = ? AND variant = ?",
                           user_id, r["product_id"], r["variant"])
             continue
+        from .catalog import variant_price
+
         v = p["variants"][r["variant"]]
+        price, old = variant_price(p, r["variant"])
         items.append({
             "product_id": p["id"], "variant": r["variant"], "qty": r["qty"],
-            "name": p["name"], "variant_name": v["name"], "price": v["price"],
+            "name": p["name"], "variant_name": v["name"], "price": price, "old_price": old,
+            "product": p,
         })
     return items
 
@@ -427,7 +567,7 @@ def generate_order_code() -> str:
     return f"YG-{secrets.randbelow(900_000) + 100_000}"
 
 
-async def create_order(user_id: int, data: dict, items: list[dict], delivery_fee: int) -> int:
+async def create_order(user_id: int, data: dict, items: list[dict], delivery_fee: int, discount: int = 0) -> int:
     subtotal = sum(i["price"] * i["qty"] for i in items)
     ts = now_str()
     code = generate_order_code()
@@ -435,11 +575,14 @@ async def create_order(user_id: int, data: dict, items: list[dict], delivery_fee
         code = generate_order_code()
     cur = await db().execute(
         "INSERT INTO orders(code, user_id, customer_name, phone, address, comment, payment_method,"
-        " subtotal, delivery_fee, total, status, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)",
+        " subtotal, delivery_fee, total, status, created_at, updated_at,"
+        " order_type, scheduled_at, promo_code, discount, lang)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?)",
         (
-            code, user_id, data["name"], data["phone"], data["address"], data.get("comment", ""),
-            data["payment_method"], subtotal, delivery_fee, subtotal + delivery_fee, ts, ts,
+            code, user_id, data["name"], data["phone"], data.get("address", ""), data.get("comment", ""),
+            data["payment_method"], subtotal, delivery_fee, max(0, subtotal - discount) + delivery_fee, ts, ts,
+            data.get("order_type", "delivery"), data.get("scheduled_at", ""), data.get("promo_code", ""),
+            discount, data.get("lang", "uz"),
         ),
     )
     order_id = cur.lastrowid
@@ -542,6 +685,119 @@ async def get_order_messages(order_id: int) -> list[dict]:
     return await fetchall("SELECT * FROM order_messages WHERE order_id = ?", order_id)
 
 
+# ---------------- promo-kodlar ----------------
+
+PROMO_FIELDS = {
+    "code", "kind", "value", "min_order", "max_discount", "usage_limit", "per_user_limit",
+    "first_order_only", "starts_at", "ends_at", "is_active",
+}
+
+
+async def get_promos() -> list[dict]:
+    return await fetchall(
+        "SELECT p.*, (SELECT COUNT(*) FROM orders o WHERE o.promo_code = p.code AND o.status != 'cancelled') AS used"
+        " FROM promo_codes p ORDER BY p.is_active DESC, p.id DESC"
+    )
+
+
+async def get_promo(promo_id: int) -> dict | None:
+    return await fetchone(
+        "SELECT p.*, (SELECT COUNT(*) FROM orders o WHERE o.promo_code = p.code AND o.status != 'cancelled') AS used,"
+        " (SELECT COALESCE(SUM(o.discount), 0) FROM orders o WHERE o.promo_code = p.code AND o.status != 'cancelled')"
+        " AS discount_sum FROM promo_codes p WHERE p.id = ?",
+        promo_id,
+    )
+
+
+async def get_promo_by_code(code: str) -> dict | None:
+    return await fetchone("SELECT * FROM promo_codes WHERE code = ?", code.strip().upper())
+
+
+async def add_promo(**fields) -> int:
+    assert set(fields) <= PROMO_FIELDS
+    fields["code"] = fields["code"].strip().upper()
+    cols = ", ".join(fields) + ", created_at"
+    marks = ", ".join("?" * (len(fields) + 1))
+    return await execute(f"INSERT INTO promo_codes({cols}) VALUES ({marks})", *fields.values(), now_str())
+
+
+async def update_promo(promo_id: int, **fields) -> None:
+    for key, value in fields.items():
+        assert key in PROMO_FIELDS, key
+        await db().execute(f"UPDATE promo_codes SET {key} = ? WHERE id = ?", (value, promo_id))
+    await db().commit()
+
+
+async def delete_promo(promo_id: int) -> None:
+    await execute("DELETE FROM promo_codes WHERE id = ?", promo_id)
+
+
+async def promo_uses(code: str, user_id: int | None = None) -> int:
+    sql = "SELECT COUNT(*) FROM orders WHERE promo_code = ? AND status != 'cancelled'"
+    args: list = [code]
+    if user_id is not None:
+        sql += " AND user_id = ?"
+        args.append(user_id)
+    return await scalar(sql, *args)
+
+
+async def user_order_count(user_id: int) -> int:
+    return await scalar("SELECT COUNT(*) FROM orders WHERE user_id = ? AND status != 'cancelled'", user_id)
+
+
+# ---------------- baholar ----------------
+
+async def add_review(order_id: int, user_id: int, rating: int, comment: str = "") -> bool:
+    """Har bir buyurtmaga bitta baho. Yangi qo'shilsa True."""
+    cur = await db().execute(
+        "INSERT OR IGNORE INTO reviews(order_id, user_id, rating, comment, created_at) VALUES (?, ?, ?, ?, ?)",
+        (order_id, user_id, rating, comment, now_str()),
+    )
+    await db().commit()
+    return cur.rowcount > 0
+
+
+async def set_review_comment(order_id: int, comment: str) -> None:
+    await execute("UPDATE reviews SET comment = ? WHERE order_id = ?", comment[:500], order_id)
+
+
+async def get_review(order_id: int) -> dict | None:
+    return await fetchone("SELECT * FROM reviews WHERE order_id = ?", order_id)
+
+
+async def get_reviews(limit: int = 10, max_rating: int | None = None) -> list[dict]:
+    sql = ("SELECT r.*, o.code, COALESCE(u.full_name, u.first_name) AS name FROM reviews r"
+           " JOIN orders o ON o.id = r.order_id LEFT JOIN users u ON u.id = r.user_id")
+    args: list = []
+    if max_rating is not None:
+        sql += " WHERE r.rating <= ?"
+        args.append(max_rating)
+    return await fetchall(sql + " ORDER BY r.id DESC LIMIT ?", *args, limit)
+
+
+async def review_stats(since: str | None = None) -> dict:
+    where, args = ("WHERE created_at >= ?", [since]) if since else ("", [])
+    row = await fetchone(f"SELECT COUNT(*) c, COALESCE(AVG(rating), 0) avg FROM reviews {where}", *args)
+    dist = {r["rating"]: r["c"] for r in await fetchall(
+        f"SELECT rating, COUNT(*) c FROM reviews {where} GROUP BY rating", *args)}
+    return {"count": row["c"], "avg": round(row["avg"], 2), "dist": dist}
+
+
+# ---------------- vaqtga buyurtmalar ----------------
+
+async def due_scheduled_orders(until: str) -> list[dict]:
+    """Eslatma yuborilmagan, vaqti yaqinlashgan faol vaqtga buyurtmalar."""
+    marks = ",".join("?" * len(ACTIVE_STATUSES))
+    return await fetchall(
+        ORDER_SELECT + f" WHERE o.scheduled_at != '' AND o.reminded = 0 AND o.scheduled_at <= ?"
+        f" AND o.status IN ({marks})", until, *ACTIVE_STATUSES,
+    )
+
+
+async def mark_reminded(order_id: int) -> None:
+    await execute("UPDATE orders SET reminded = 1 WHERE id = ?", order_id)
+
+
 # ---------------- statistics ----------------
 
 async def stats(since: str | None) -> dict:
@@ -573,7 +829,19 @@ async def stats(since: str | None) -> dict:
     customers = await scalar(
         f"SELECT COUNT(DISTINCT user_id) FROM orders {where}", *args
     )
+    by_type = {
+        r["order_type"]: r["c"]
+        for r in await fetchall(
+            f"SELECT order_type, COUNT(*) c FROM orders {where} {and_} status != 'cancelled' GROUP BY order_type",
+            *args)
+    }
+    promo_sum = await scalar(
+        f"SELECT COALESCE(SUM(discount), 0) FROM orders {where} {and_} status = 'delivered'", *args
+    )
     return {
+        "by_type": by_type,
+        "promo_sum": promo_sum,
+        "rating": await review_stats(since),
         "total_orders": total_orders,
         "by_status": by_status,
         "revenue": revenue,

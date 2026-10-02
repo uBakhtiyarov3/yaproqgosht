@@ -6,7 +6,7 @@ from .. import db
 from ..keyboards import B, ikb, order_staff_kb, staff_kb
 from ..notify import notify_status_change, refresh_staff_messages
 from ..roles import IsStaff
-from ..utils import ACTIVE_STATUSES, NEXT_STATUS, STATUS_LABELS, format_order, money, now
+from ..utils import ACTIVE_STATUSES, format_order, money, next_status, now, status_label
 
 router = Router(name="staff")
 router.message.filter(IsStaff)
@@ -114,14 +114,15 @@ async def change_status(call: CallbackQuery, bot: Bot) -> None:
     if not order:
         await call.answer("Buyurtma topilmadi", show_alert=True)
         return
-    expected = NEXT_STATUS.get(order["status"], (None,))[0]
+    otype = order.get("order_type") or "delivery"
+    expected = (next_status(order["status"], otype) or (None,))[0]
     if expected != new_status:
         # boshqa xodim allaqachon o'zgartirgan
-        await call.answer(f"Holat allaqachon: {STATUS_LABELS[order['status']]}", show_alert=True)
+        await call.answer(f"Holat allaqachon: {status_label(order['status'], otype)}", show_alert=True)
         await refresh_staff_messages(bot, order["id"])
         return
     await db.set_order_status(order["id"], new_status, call.from_user.id)
-    await call.answer(STATUS_LABELS[new_status])
+    await call.answer(status_label(new_status, otype))
     await notify_status_change(bot, order["id"])
 
 

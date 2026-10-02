@@ -7,7 +7,8 @@ from aiogram.types import (
 )
 
 from .config import config
-from .utils import NEXT_STATUS
+from .i18n import t
+from .utils import next_status
 
 
 def webapp_ready() -> bool:
@@ -22,12 +23,7 @@ def webapp_url(section: str = "") -> str:
 
 class B:
     """Reply tugmalar matnlari (handlerlarda filtr sifatida ishlatiladi)."""
-    MENU = "🍔 Mini ilovada buyurtma"
-    BOT_MENU = "📋 Menyu"
-    CART = "🛒 Savat"
-    MY_ORDERS = "📦 Buyurtmalarim"
-    CONTACT = "📞 Aloqa"
-    ABOUT = "ℹ️ Biz haqimizda"
+    # Mijoz tugmalari ikki tilli — i18n.py dagi b_* kalitlari (handlerlarda both("b_...") bilan)
     STAFF = "👷 Xodim kabineti"
     MANAGER = "👑 Menejer paneli"
     BACK = "⬅️ Asosiy menyu"
@@ -48,20 +44,22 @@ class B:
     EXPORT = "📥 Hisobot (CSV)"
     USERS = "🙋 Mijozlar"
     BACKUP = "💾 Zaxira nusxa"
+    PROMOS = "🎁 Promo-kodlar"
+    REVIEWS = "⭐ Baholar"
 
     CANCEL = "🚫 Bekor qilish"
 
 
-def main_kb(role: str) -> ReplyKeyboardMarkup:
+def main_kb(role: str, lang: str = "uz") -> ReplyKeyboardMarkup:
     rows = []
     if webapp_ready():
         # Eslatma: reply-klaviatura orqali ochilgan Mini App ga Telegram initData bermaydi,
         # shuning uchun bu oddiy tugma — bosilganda bot inline web_app tugmasini yuboradi.
-        rows.append([KeyboardButton(text=B.MENU)])
+        rows.append([KeyboardButton(text=t("b_menu_mini", lang))])
     rows += [
-        [KeyboardButton(text=B.BOT_MENU), KeyboardButton(text=B.CART)],
-        [KeyboardButton(text=B.MY_ORDERS), KeyboardButton(text=B.CONTACT)],
-        [KeyboardButton(text=B.ABOUT)],
+        [KeyboardButton(text=t("b_menu", lang)), KeyboardButton(text=t("b_cart", lang))],
+        [KeyboardButton(text=t("b_orders", lang)), KeyboardButton(text=t("b_contact", lang))],
+        [KeyboardButton(text=t("b_about", lang)), KeyboardButton(text=t("b_lang", lang))],
     ]
     if role in ("staff", "manager"):
         rows.append([KeyboardButton(text=B.STAFF)])
@@ -70,20 +68,33 @@ def main_kb(role: str) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
-def start_inline_kb() -> InlineKeyboardMarkup:
+def start_inline_kb(lang: str = "uz") -> InlineKeyboardMarkup:
     """/start dagi ikki yo'l: Mini App yoki bot ichida buyurtma."""
     rows = []
     if webapp_ready():
-        rows.append([InlineKeyboardButton(text="🍔 Mini ilovada buyurtma berish", web_app=WebAppInfo(url=webapp_url()))])
-    rows.append([InlineKeyboardButton(text="📋 Botning o'zida buyurtma berish", callback_data="sh:cats")])
+        rows.append([InlineKeyboardButton(text=t("start_mini_btn", lang), web_app=WebAppInfo(url=webapp_url()))])
+    rows.append([InlineKeyboardButton(text=t("start_bot_btn", lang), callback_data="sh:cats")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def order_track_kb(code: str) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(text="📦 Buyurtmani kuzatish", callback_data=f"sh:o:{code}")]]
+def lang_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🇺🇿 O'zbekcha", callback_data="lang:uz"),
+        InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru"),
+    ]])
+
+
+def order_track_kb(code: str, lang: str = "uz") -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=t("track_btn", lang), callback_data=f"sh:o:{code}")]]
     if webapp_ready():
-        rows.append([InlineKeyboardButton(text="🍔 Mini ilovada ochish", web_app=WebAppInfo(url=webapp_url("orders")))])
+        rows.append([InlineKeyboardButton(text=t("mini_inline", lang), web_app=WebAppInfo(url=webapp_url("orders")))])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def rating_kb(order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=f"{n}⭐", callback_data=f"rv:{order_id}:{n}") for n in range(1, 6)
+    ]])
 
 
 def staff_kb() -> ReplyKeyboardMarkup:
@@ -103,6 +114,7 @@ def manager_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=B.STATS), KeyboardButton(text=B.ORDERS)],
             [KeyboardButton(text=B.MENU_EDIT), KeyboardButton(text=B.BROADCAST)],
             [KeyboardButton(text=B.STAFF_LIST), KeyboardButton(text=B.USERS)],
+            [KeyboardButton(text=B.PROMOS), KeyboardButton(text=B.REVIEWS)],
             [KeyboardButton(text=B.SETTINGS), KeyboardButton(text=B.EXPORT)],
             [KeyboardButton(text=B.BACKUP)],
             [KeyboardButton(text=B.STAFF), KeyboardButton(text=B.BACK)],
@@ -132,10 +144,10 @@ def webapp_inline_kb(text: str = "🍔 Menyuni ochish", section: str = "") -> In
 
 
 def order_staff_kb(order: dict) -> InlineKeyboardMarkup | None:
-    status = order["status"]
-    if status not in NEXT_STATUS:
+    step = next_status(order["status"], order.get("order_type") or "delivery")
+    if not step:
         return None
-    nxt, label = NEXT_STATUS[status]
+    nxt, label = step
     return ikb([
         [(label, f"ost:{order['id']}:{nxt}")],
         [("❌ Bekor qilish", f"ocn:{order['id']}")],

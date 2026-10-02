@@ -2,6 +2,7 @@ from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message
 
 from . import db
+from .catalog import norm_lang
 from .config import config
 
 
@@ -24,3 +25,8 @@ class RoleFilter(BaseFilter):
 
 IsStaff = RoleFilter("staff", "manager")
 IsManager = RoleFilter("manager")
+
+
+async def lang_of(user_id: int) -> str:
+    user = await db.get_user(user_id)
+    return norm_lang(user["lang"]) if user and user.get("lang") else "uz"

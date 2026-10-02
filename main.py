@@ -9,6 +9,7 @@ from aiohttp import web
 
 from app import db
 from app.backup import daily_backup_loop
+from app.notify import scheduler_loop
 from app.config import config
 from app.handlers import setup_routers
 from app.keyboards import webapp_ready, webapp_url
@@ -23,6 +24,7 @@ async def setup_bot_ui(bot: Bot) -> None:
         BotCommand(command="menu", description="Menyu / buyurtma berish"),
         BotCommand(command="cart", description="Savat"),
         BotCommand(command="orders", description="Buyurtmalarim"),
+        BotCommand(command="lang", description="Til / Язык"),
         BotCommand(command="help", description="Yordam"),
     ])
     if webapp_ready():
@@ -51,9 +53,10 @@ async def main() -> None:
     try:
         await setup_bot_ui(bot)
         await bot.delete_webhook(drop_pending_updates=False)
-        backup_task = asyncio.create_task(daily_backup_loop(bot))
+        tasks = [asyncio.create_task(daily_backup_loop(bot)), asyncio.create_task(scheduler_loop(bot))]
         await dp.start_polling(bot)
-        backup_task.cancel()
+        for task in tasks:
+            task.cancel()
     finally:
         await runner.cleanup()
         await db.close_db()

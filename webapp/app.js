@@ -4,23 +4,35 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   const initData = (tg && tg.initData) || "";
   const devUser = new URLSearchParams(location.search).get("dev_user");
+  const API = ((window.YG_CONFIG && window.YG_CONFIG.api) || "").replace(/\/$/, "");
 
   const state = {
+    lang: "uz",
+    texts: {},
     categories: [],
     products: {},          // id -> product
-    settings: { is_open: true, delivery_fee: 0, min_order: 0, phone: "", work_hours: "" },
+    settings: { is_open: true, accepting: true, delivery_fee: 0, min_order: 0, delivery_enabled: true, pickup_enabled: true },
+    slots: [],
     cart: loadCart(),      // [{pid, v, qty}]
     me: null,
     view: "menu",
     history: [],
     currentOrder: null,
     pollTimer: null,
+    query: "",
+    co: { type: "delivery", time: "asap", day: 0, slot: "", promo: "", quote: null },
   };
 
   // ---------------- utils ----------------
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const money = (n) => Math.round(n).toLocaleString("ru-RU").replace(/ |,/g, " ") + " so'm";
+  const L = (key, vars) => {
+    let s = state.texts[key] ?? key;
+    if (vars) Object.entries(vars).forEach(([k, v]) => { s = s.split("{" + k + "}").join(v); });
+    return s;
+  };
+  const money = (n) => Math.round(n).toLocaleString("ru-RU").replace(/ |,/g, " ") + (state.lang === "ru" ? " сум" : " so'm");
+  const imgUrl = (p) => (p ? (API && !/^https?:/.test(p) ? API + "/" + p : p) : "");
   const haptic = (type = "light") => { try { tg && tg.HapticFeedback.impactOccurred(type); } catch (e) {} };
   const notifyHaptic = (type) => { try { tg && tg.HapticFeedback.notificationOccurred(type); } catch (e) {} };
 
@@ -47,13 +59,20 @@
     else if (devUser) headers["X-Dev-User"] = devUser;
     let res;
     try {
-      res = await fetch(path, { ...opts, headers });
+      res = await fetch(API + path, { ...opts, headers });
     } catch (e) {
-      throw new Error("Internet aloqasini tekshiring");
+      throw new Error(L("network"));
     }
-    const data = await res.json().catch(() => ({ ok: false, error: "Server xatosi" }));
-    if (!res.ok || !data.ok) throw new Error(data.error || "Xatolik yuz berdi");
+    const data = await res.json().catch(() => ({ ok: false, error: "Server error" }));
+    if (!res.ok || !data.ok) throw new Error(data.error || "Error");
     return data;
+  }
+
+  function applyTexts() {
+    document.documentElement.lang = state.lang;
+    document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = L(el.dataset.i18n); });
+    document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = L(el.dataset.i18nPh); });
+    document.querySelectorAll("#lang-switch button").forEach((b) => b.classList.toggle("active", b.dataset.lang === state.lang));
   }
 
   // ---------------- navigation ----------------
@@ -76,10 +95,8 @@
   }
 
   function back() {
-    if (!$("#sheet").classList.contains("open")) {
-      const prev = state.history.pop() || "menu";
-      go(prev, false);
-    } else closeSheet();
+    if ($("#sheet").classList.contains("open")) return closeSheet();
+    go(state.history.pop() || "menu", false);
   }
 
   function updateBackButton() {
@@ -93,67 +110,106 @@
     if (g) { haptic(); go(g.dataset.go); }
   });
 
+  // ---------------- language ----------------
+  $("#lang-switch").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-lang]");
+    if (!b || b.dataset.lang === state.lang) return;
+    haptic();
+    try { await api("/api/me/lang", { method: "POST", body: JSON.stringify({ lang: b.dataset.lang }) }); } catch (err) {}
+    await loadMenu();
+  });
+
   // ---------------- menu ----------------
   async function loadMenu() {
     try {
       const data = await api("/api/menu");
+      state.lang = data.lang || "uz";
+      state.texts = data.texts || {};
       state.categories = data.categories;
       state.settings = data.settings;
+      state.slots = data.slots || [];
       state.products = {};
       data.categories.forEach((c) => c.products.forEach((p) => (state.products[p.id] = { ...p, category: c.name })));
-      // mavjud bo'lmagan mahsulotlarni savatdan olib tashlash
       state.cart = state.cart.filter((i) => state.products[i.pid] && state.products[i.pid].variants[i.v]);
       saveCart();
+      applyTexts();
       renderMenu();
       updateCartUI();
+      if (state.view === "cart") renderCart();
     } catch (e) {
       $("#menu-list").innerHTML = `<div class="empty"><div class="e-ico">⚠️</div><p>${esc(e.message)}</p>
-        <button class="primary-btn" id="retry">Qayta urinish</button></div>`;
+        <button class="primary-btn" id="retry">${esc(L("retry"))}</button></div>`;
       $("#retry").onclick = loadMenu;
     }
   }
 
-  function minPrice(p) { return Math.min(...p.variants.map((v) => v.price)); }
+  function minVariant(p) { return p.variants.reduce((m, v) => (v.price < m.price ? v : m), p.variants[0]); }
   function qtyInCart(pid) { return state.cart.filter((i) => i.pid === pid).reduce((s, i) => s + i.qty, 0); }
-  function imgStyle(p) { return p.image ? `style="background-image:url('${esc(p.image)}')"` : ""; }
+  function imgStyle(p) { return p.image ? `style="background-image:url('${esc(imgUrl(p.image))}')"` : ""; }
+  const BADGE_ICONS = { hit: "🔥 Hit", new: "🆕", top: "⭐ Top", spicy: "🌶" };
+  function badgesHTML(p) {
+    const b = (p.badges || []).map((k) => `<span class="badge-chip ${k}">${esc(BADGE_ICONS[k] || k)}</span>`);
+    if (p.discount) b.unshift(`<span class="badge-chip sale">-${p.discount}%</span>`);
+    return b.length ? `<div class="badges">${b.join("")}</div>` : "";
+  }
+  function priceHTML(v, prefix) {
+    const pre = prefix ? `<small>${esc(L("from"))} </small>` : "";
+    if (v.old_price) return `<span class="old">${money(v.old_price)}</span><span class="new">${pre}${money(v.price)}</span>`;
+    return `<span>${pre}${money(v.price)}</span>`;
+  }
+
+  function closedText() {
+    const s = state.settings;
+    if (!s.accepting) return L("notAccepting");
+    if (s.is_open) return "";
+    let t = L("closed");
+    if (s.next_open) t += " " + L("opensAt", { time: s.next_open });
+    if (state.slots.length) t += " " + L("laterOnly");
+    return t;
+  }
 
   function renderMenu() {
     const banner = $("#closed-banner");
-    if (!state.settings.is_open) {
-      banner.textContent = "⏸ Hozir buyurtma qabul qilinmayapti. Ish vaqti: " + state.settings.work_hours;
-      banner.classList.remove("hidden");
-    } else banner.classList.add("hidden");
+    const ct = closedText();
+    banner.textContent = ct;
+    banner.classList.toggle("hidden", !ct);
 
     $("#cats").innerHTML = state.categories
       .map((c, i) => `<button class="cat-chip ${i === 0 ? "active" : ""}" data-cat="${c.id}">${esc(c.emoji)} ${esc(c.name)}</button>`)
       .join("");
+    $("#cats").classList.toggle("hidden", !!state.query);
 
     if (!state.categories.length) {
-      $("#menu-list").innerHTML = `<div class="empty"><div class="e-ico">🍽</div><p>Menyu hozircha bo'sh</p></div>`;
+      $("#menu-list").innerHTML = `<div class="empty"><div class="e-ico">🍽</div><p>${esc(L("emptyMenu"))}</p></div>`;
+      return;
+    }
+    if (state.query) {
+      const q = state.query.toLowerCase();
+      const found = Object.values(state.products).filter((p) => p.search.includes(q) || p.name.toLowerCase().includes(q));
+      $("#menu-list").innerHTML = found.length
+        ? `<div class="grid">${found.map(productCard).join("")}</div>`
+        : `<div class="empty"><div class="e-ico">🔍</div><p>${esc(L("searchEmpty"))}</p></div>`;
       return;
     }
     $("#menu-list").innerHTML = state.categories.map((c) => `
       <section class="cat-section" id="cat-${c.id}" data-cat="${c.id}">
         <div class="cat-title">${esc(c.emoji)} ${esc(c.name)}</div>
-        <div class="grid">
-          ${c.products.map((p) => productCard(p)).join("")}
-        </div>
+        <div class="grid">${c.products.map(productCard).join("")}</div>
       </section>`).join("");
     observeSections();
   }
 
   function productCard(p) {
     const q = qtyInCart(p.id);
-    const multi = p.variants.length > 1;
     return `
       <div class="product" data-pid="${p.id}">
-        <div class="img" ${imgStyle(p)}>${q ? `<span class="qty-pill">${q}</span>` : ""}</div>
+        <div class="img" ${imgStyle(p)}>${badgesHTML(p)}${q ? `<span class="qty-pill">${q}</span>` : ""}</div>
         <div class="body">
           <div class="name">${esc(p.name)}</div>
           ${p.description ? `<div class="desc">${esc(p.description)}</div>` : ""}
           <div class="foot">
-            <div class="price">${multi ? "<small>dan </small>" : ""}${money(minPrice(p))}</div>
-            <button class="add-btn" data-quick="${p.id}" aria-label="Savatga qo'shish">+</button>
+            <div class="price">${priceHTML(minVariant(p), p.variants.length > 1)}</div>
+            <button class="add-btn" data-quick="${p.id}" aria-label="+">+</button>
           </div>
         </div>
       </div>`;
@@ -177,9 +233,23 @@
     if (!chip) return;
     haptic();
     const sec = document.getElementById("cat-" + chip.dataset.cat);
-    const y = sec.getBoundingClientRect().top + window.scrollY - 64;
-    window.scrollTo({ top: y, behavior: "smooth" });
+    window.scrollTo({ top: sec.getBoundingClientRect().top + window.scrollY - 64, behavior: "smooth" });
     setActiveChip(chip.dataset.cat);
+  });
+
+  let searchTimer;
+  $("#search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.query = e.target.value.trim();
+      $("#search-clear").classList.toggle("hidden", !state.query);
+      renderMenu();
+    }, 150);
+  });
+  $("#search-clear").addEventListener("click", () => {
+    $("#search").value = ""; state.query = "";
+    $("#search-clear").classList.add("hidden");
+    renderMenu();
   });
 
   function setActiveChip(id) {
@@ -204,7 +274,6 @@
   let sheetState = null;
 
   function openSheet(pid) {
-    const p = state.products[pid];
     sheetState = { pid, v: 0, qty: 1 };
     renderSheet();
     $("#sheet-backdrop").classList.remove("hidden");
@@ -215,21 +284,21 @@
 
   function renderSheet() {
     const p = state.products[sheetState.pid];
-    const price = p.variants[sheetState.v].price * sheetState.qty;
+    const v = p.variants[sheetState.v];
     $("#sheet").innerHTML = `
-      <div class="s-img" ${imgStyle(p)}><button class="s-close" data-close>✕</button></div>
+      <div class="s-img" ${imgStyle(p)}>${badgesHTML(p)}<button class="s-close" data-close>✕</button></div>
       <div class="s-body">
         <h3>${esc(p.name)}</h3>
         <p class="s-desc">${esc(p.description || p.category)}</p>
-        ${p.variants.length > 1 ? `<div class="variants">${p.variants.map((v, i) => `
+        ${p.variants.length > 1 ? `<div class="variants">${p.variants.map((x, i) => `
           <button class="variant ${i === sheetState.v ? "active" : ""}" data-v="${i}">
-            <b>${esc(v.name || "Standart")}</b><small>${money(v.price)}</small>
-          </button>`).join("")}</div>` : ""}
+            <b>${esc(x.name || "Standart")}</b><small class="vprice">${priceHTML(x)}</small>
+          </button>`).join("")}</div>` : `<div class="sheet-price">${priceHTML(v)}</div>`}
         <div class="sheet-actions">
           <div class="stepper">
             <button data-step="-1">−</button><span>${sheetState.qty}</span><button data-step="1">+</button>
           </div>
-          <button class="primary-btn" data-add>Qo'shish · ${money(price)}</button>
+          <button class="primary-btn" data-add>${esc(L("add"))} · ${money(v.price * sheetState.qty)}</button>
         </div>
       </div>`;
   }
@@ -240,10 +309,7 @@
     if (v) { sheetState.v = +v.dataset.v; haptic(); return renderSheet(); }
     const st = e.target.closest("[data-step]");
     if (st) { sheetState.qty = Math.max(1, Math.min(50, sheetState.qty + +st.dataset.step)); haptic(); return renderSheet(); }
-    if (e.target.closest("[data-add]")) {
-      addToCart(sheetState.pid, sheetState.v, sheetState.qty);
-      closeSheet();
-    }
+    if (e.target.closest("[data-add]")) { addToCart(sheetState.pid, sheetState.v, sheetState.qty); closeSheet(); }
   });
   $("#sheet-backdrop").addEventListener("click", closeSheet);
 
@@ -260,61 +326,45 @@
     else state.cart.push({ pid, v, qty });
     saveCart();
     notifyHaptic("success");
-    toast("✓ Savatga qo'shildi");
+    toast(L("added"));
     refreshCardBadge(pid);
     updateCartUI();
   }
 
   function refreshCardBadge(pid) {
-    const card = document.querySelector(`.product[data-pid="${pid}"]`);
-    if (card) card.outerHTML = productCard(state.products[pid]);
+    document.querySelectorAll(`.product[data-pid="${pid}"]`).forEach((card) => { card.outerHTML = productCard(state.products[pid]); });
   }
 
   function cartTotals() {
     const subtotal = state.cart.reduce((s, i) => s + state.products[i.pid].variants[i.v].price * i.qty, 0);
     const count = state.cart.reduce((s, i) => s + i.qty, 0);
-    const delivery = count ? state.settings.delivery_fee : 0;
-    return { subtotal, count, delivery, total: subtotal + delivery };
+    return { subtotal, count };
   }
 
   function updateCartUI() {
-    const { count, total } = cartTotals();
+    const { count, subtotal } = cartTotals();
     const badge = $("#cart-badge");
     badge.textContent = count;
     badge.classList.toggle("hidden", !count);
-    const bar = $("#cart-bar");
     const showBar = count > 0 && state.view === "menu";
-    bar.classList.toggle("hidden", !showBar);
+    $("#cart-bar").classList.toggle("hidden", !showBar);
     if (showBar) {
-      $("#cart-bar-count").textContent = count + " ta";
-      $("#cart-bar-total").textContent = money(total);
+      $("#cart-bar-count").textContent = count + " " + L("pcs");
+      $("#cart-bar-total").textContent = money(subtotal);
     }
   }
   $("#cart-bar").addEventListener("click", () => { haptic(); go("cart"); });
 
-  function summaryHTML(withNote) {
-    const { subtotal, delivery, total } = cartTotals();
-    const min = state.settings.min_order;
-    let note = "";
-    if (withNote && min && subtotal < min) note = `<div class="note">Minimal buyurtma: ${money(min)}. Yana ${money(min - subtotal)} qo'shing.</div>`;
-    if (withNote && !state.settings.is_open) note += `<div class="note">⏸ Hozir buyurtma qabul qilinmayapti (${esc(state.settings.work_hours)})</div>`;
-    return `
-      <div class="row"><span>Mahsulotlar</span><span>${money(subtotal)}</span></div>
-      <div class="row"><span>Yetkazib berish</span><span>${delivery ? money(delivery) : "bepul"}</span></div>
-      <div class="row total"><span>Jami</span><b>${money(total)}</b></div>${note}`;
-  }
-
   function canCheckout() {
-    const { subtotal, count } = cartTotals();
-    return count > 0 && state.settings.is_open && subtotal >= state.settings.min_order;
+    return cartTotals().count > 0 && state.settings.accepting && (state.settings.is_open || state.slots.length > 0);
   }
 
   function renderCart() {
     const list = $("#cart-list");
     $("#clear-cart").classList.toggle("hidden", !state.cart.length);
     if (!state.cart.length) {
-      list.innerHTML = `<div class="empty"><div class="e-ico">🛒</div><p>Savatingiz bo'sh</p>
-        <button class="primary-btn" data-go="menu">Menyuga o'tish</button></div>`;
+      list.innerHTML = `<div class="empty"><div class="e-ico">🛒</div><p>${esc(L("emptyCart"))}</p>
+        <button class="primary-btn" data-go="menu">${esc(L("toMenu"))}</button></div>`;
       $("#cart-summary").innerHTML = "";
       $("#to-checkout").classList.add("hidden");
       return;
@@ -327,14 +377,22 @@
           <div class="thumb" ${imgStyle(p)}></div>
           <div class="info">
             <b>${esc(p.name)}</b>${v.name ? `<small>${esc(v.name)}</small>` : ""}
-            <div class="p">${money(v.price * i.qty)}</div>
+            <div class="p">${v.old_price ? `<span class="old">${money(v.old_price * i.qty)}</span>` : ""}${money(v.price * i.qty)}</div>
           </div>
           <div class="stepper sm">
             <button data-cq="${idx}" data-d="-1">−</button><span>${i.qty}</span><button data-cq="${idx}" data-d="1">+</button>
           </div>
         </div>`;
     }).join("");
-    $("#cart-summary").innerHTML = summaryHTML(true);
+    const { subtotal } = cartTotals();
+    const s = state.settings;
+    let html = `<div class="row total"><span>${esc(L("items"))}</span><b>${money(subtotal)}</b></div>`;
+    if (s.delivery_enabled && s.min_order && subtotal < s.min_order) {
+      html += `<div class="note">${esc(L("minOrder", { sum: money(s.min_order), left: money(s.min_order - subtotal) }))}</div>`;
+    }
+    const ct = closedText();
+    if (ct) html += `<div class="note">${esc(ct)}</div>`;
+    $("#cart-summary").innerHTML = html;
     const btn = $("#to-checkout");
     btn.classList.remove("hidden");
     btn.disabled = !canCheckout();
@@ -345,34 +403,29 @@
     const b = e.target.closest("[data-cq]");
     if (!b) return;
     const item = state.cart[+b.dataset.cq];
-    item.qty += +b.dataset.d;
+    item.qty = Math.min(50, item.qty + +b.dataset.d);
     if (item.qty <= 0) state.cart.splice(+b.dataset.cq, 1);
-    if (item.qty > 50) item.qty = 50;
     haptic();
-    saveCart();
-    renderCart();
-    updateCartUI();
-    refreshCardBadge(item.pid);
+    saveCart(); renderCart(); updateCartUI(); refreshCardBadge(item.pid);
   });
 
-  $("#clear-cart").addEventListener("click", () => {
-    const doClear = () => {
-      const pids = state.cart.map((i) => i.pid);
-      state.cart = []; saveCart(); renderCart(); updateCartUI();
-      pids.forEach(refreshCardBadge);
-    };
-    if (tg && tg.showConfirm && initData) tg.showConfirm("Savatni tozalaysizmi?", (ok) => ok && doClear());
-    else if (confirm("Savatni tozalaysizmi?")) doClear();
-  });
+  function confirmDialog(text, cb) {
+    if (tg && tg.showConfirm && initData) tg.showConfirm(text, (ok) => ok && cb());
+    else if (confirm(text)) cb();
+  }
+
+  $("#clear-cart").addEventListener("click", () => confirmDialog(L("clearConfirm"), () => {
+    const pids = state.cart.map((i) => i.pid);
+    state.cart = []; saveCart(); renderCart(); updateCartUI();
+    pids.forEach(refreshCardBadge);
+  }));
 
   // ---------------- checkout ----------------
-  // Telefon: "+998" doimiy prefiks, foydalanuvchi faqat 9 ta raqam kiritadi -> "90 123 45 67"
   function formatLocal(digits) {
     const d = digits.slice(0, 9);
     return [d.slice(0, 2), d.slice(2, 5), d.slice(5, 7), d.slice(7, 9)].filter(Boolean).join(" ");
   }
   function localDigits(stored) {
-    // saqlangan "+998901234567" -> "901234567"
     const d = String(stored || "").replace(/\D/g, "");
     return d.length === 12 && d.startsWith("998") ? d.slice(3) : d.slice(-9);
   }
@@ -383,13 +436,11 @@
     const digitsBefore = el.value.slice(0, caret).replace(/\D/g, "").length;
     const formatted = formatLocal(el.value.replace(/\D/g, ""));
     el.value = formatted;
-    // kursorni o'sha raqam ortida saqlash
     let pos = 0, seen = 0;
     while (pos < formatted.length && seen < digitsBefore) { if (/\d/.test(formatted[pos])) seen++; pos++; }
     try { el.setSelectionRange(pos, pos); } catch (e) {}
   });
   phoneInput.addEventListener("paste", (e) => {
-    // to'liq raqam joylansa (+998 90 ... yoki 998 90 ...) — prefiksni olib tashlaymiz
     const text = (e.clipboardData || window.clipboardData).getData("text") || "";
     let d = text.replace(/\D/g, "");
     if (d.length === 12 && d.startsWith("998")) d = d.slice(3);
@@ -399,35 +450,156 @@
   });
   const phoneValue = () => "+998" + phoneInput.value.replace(/\D/g, "");
 
+  function rawItems() { return state.cart.map((i) => ({ product_id: i.pid, variant: i.v, qty: i.qty })); }
+
   function renderCheckout() {
     if (!state.cart.length) return go("cart", false);
+    const s = state.settings;
     const me = state.me || {};
     const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
     if (!$("#f-name").value) $("#f-name").value = me.full_name || (tgUser ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ") : "");
     if (!phoneInput.value && me.phone) phoneInput.value = formatLocal(localDigits(me.phone));
     if (!$("#f-address").value && me.address) $("#f-address").value = me.address;
-    $("#checkout-summary").innerHTML = summaryHTML(true);
-    $("#submit-btn").disabled = !canCheckout();
+
+    // buyurtma turi
+    if (!s[state.co.type + "_enabled"]) state.co.type = s.delivery_enabled ? "delivery" : "pickup";
+    $("#type-seg").classList.toggle("hidden", !(s.delivery_enabled && s.pickup_enabled));
+    // vaqt
+    if (!s.is_open) state.co.time = "later";
+    renderType();
+    renderTime();
     $("#form-error").classList.add("hidden");
+    refreshQuote();
+  }
+
+  function renderType() {
+    document.querySelectorAll("#type-seg button").forEach((b) => b.classList.toggle("active", b.dataset.type === state.co.type));
+    const pickup = state.co.type === "pickup";
+    $("#delivery-block").classList.toggle("hidden", pickup);
+    const box = $("#pickup-block");
+    box.classList.toggle("hidden", !pickup);
+    if (pickup) box.innerHTML = `<b>${esc(L("pickupFrom"))}</b>${state.settings.cafe_address ? `<div>📍 ${esc(state.settings.cafe_address)}</div>` : ""}`;
+  }
+
+  $("#type-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-type]");
+    if (!b) return;
+    haptic();
+    state.co.type = b.dataset.type;
+    renderType();
+    refreshQuote();
+  });
+
+  function renderTime() {
+    const asapBtn = document.querySelector('#time-seg [data-time="asap"]');
+    asapBtn.disabled = !state.settings.is_open;
+    document.querySelectorAll("#time-seg button").forEach((b) => b.classList.toggle("active", b.dataset.time === state.co.time));
+    const picker = $("#slot-picker");
+    picker.classList.toggle("hidden", state.co.time !== "later");
+    if (state.co.time !== "later") return;
+    if (!state.slots.length) {
+      $("#slot-days").innerHTML = `<span class="muted">${esc(L("noSlots"))}</span>`;
+      $("#slot-times").innerHTML = "";
+      return;
+    }
+    if (state.co.day >= state.slots.length) state.co.day = 0;
+    $("#slot-days").innerHTML = state.slots.map((d, i) =>
+      `<button type="button" class="chip ${i === state.co.day ? "active" : ""}" data-day="${i}">${esc(L(d.day))}</button>`).join("");
+    const day = state.slots[state.co.day];
+    $("#slot-times").innerHTML = day.times.map((t) =>
+      `<button type="button" class="chip ${t.value === state.co.slot ? "active" : ""}" data-slot="${esc(t.value)}">${esc(t.label)}</button>`).join("");
+  }
+
+  $("#time-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-time]");
+    if (!b || b.disabled) return;
+    haptic();
+    state.co.time = b.dataset.time;
+    renderTime();
+  });
+  $("#slot-picker").addEventListener("click", (e) => {
+    const d = e.target.closest("[data-day]");
+    if (d) { state.co.day = +d.dataset.day; state.co.slot = ""; haptic(); return renderTime(); }
+    const s = e.target.closest("[data-slot]");
+    if (s) { state.co.slot = s.dataset.slot; haptic(); renderTime(); }
+  });
+
+  // promo-kod
+  function promoMsg(text, ok) {
+    const el = $("#promo-msg");
+    el.textContent = text;
+    el.className = "promo-msg " + (ok ? "ok" : "err");
+    el.classList.toggle("hidden", !text);
+  }
+  $("#promo-apply").addEventListener("click", async () => {
+    if (state.co.promo) {
+      state.co.promo = ""; $("#f-promo").value = ""; $("#f-promo").disabled = false;
+      $("#promo-apply").textContent = L("apply");
+      promoMsg("");
+      return refreshQuote();
+    }
+    const code = $("#f-promo").value.trim().toUpperCase();
+    if (!code) return;
+    try {
+      const { quote } = await api("/api/quote", { method: "POST", body: JSON.stringify({ items: rawItems(), order_type: state.co.type, promo_code: code }) });
+      state.co.promo = quote.promo_code;
+      $("#f-promo").value = quote.promo_code; $("#f-promo").disabled = true;
+      $("#promo-apply").textContent = L("remove");
+      promoMsg("✓ " + quote.promo_label, true);
+      notifyHaptic("success");
+      renderSummary(quote);
+    } catch (e) {
+      promoMsg(e.message, false);
+      notifyHaptic("error");
+    }
+  });
+
+  let quoteSeq = 0;
+  async function refreshQuote() {
+    const seq = ++quoteSeq;
+    try {
+      const { quote } = await api("/api/quote", { method: "POST", body: JSON.stringify({ items: rawItems(), order_type: state.co.type, promo_code: state.co.promo }) });
+      if (seq === quoteSeq) renderSummary(quote);
+    } catch (e) {
+      if (state.co.promo) { // promo endi mos emas (masalan olib ketishga o'tildi)
+        promoMsg(e.message, false);
+        state.co.promo = ""; $("#f-promo").disabled = false; $("#promo-apply").textContent = L("apply");
+        return refreshQuote();
+      }
+      showFormError(e.message);
+    }
+  }
+
+  function renderSummary(q) {
+    state.co.quote = q;
+    let html = `<div class="row"><span>${esc(L("items"))}</span><span>${money(q.subtotal)}</span></div>`;
+    if (q.promo_code) html += `<div class="row disc"><span>🎁 ${esc(L("discount"))} (${esc(q.promo_code)})</span><span>${q.discount ? "−" + money(q.discount) : esc(q.promo_label)}</span></div>`;
+    if (state.co.type === "delivery") html += `<div class="row"><span>${esc(L("deliveryFee"))}</span><span>${q.delivery_fee ? money(q.delivery_fee) : esc(L("free"))}</span></div>`;
+    html += `<div class="row total"><span>${esc(L("total"))}</span><b>${money(q.total)}</b></div>`;
+    if (q.min_order && q.subtotal < q.min_order) {
+      html += `<div class="note">${esc(L("minOrder", { sum: money(q.min_order), left: money(q.min_order - q.subtotal) }))}</div>`;
+    }
+    $("#checkout-summary").innerHTML = html;
+    $("#submit-btn").disabled = !!(q.min_order && q.subtotal < q.min_order);
   }
 
   document.querySelector(".pay-option.disabled").addEventListener("click", (e) => {
     e.preventDefault();
     notifyHaptic("warning");
-    toast("💳 Karta orqali to'lov tez kunda!");
+    toast(L("cardSoon"));
   });
 
   $("#geo-btn").addEventListener("click", () => {
     const btn = $("#geo-btn");
     const done = (lat, lon) => {
       const link = `📍 https://maps.google.com/?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
-      const c = $("#f-comment");
-      c.value = (c.value.replace(/📍 \S+/g, "").trim() + " " + link).trim();
-      btn.textContent = "✓ Joylashuv qo'shildi";
+      const a = $("#f-address");
+      a.value = (a.value.replace(/📍 \S+/g, "").trim() + " " + link).trim();
+      btn.textContent = L("geoAdded");
       notifyHaptic("success");
     };
-    const fail = () => { btn.textContent = "📍 Joriy joylashuvimni qo'shish"; toast("Joylashuvni aniqlab bo'lmadi"); };
-    btn.textContent = "⏳ Aniqlanmoqda...";
+    const fail = () => { btn.textContent = L("geo"); toast(L("geoFail")); };
+    btn.textContent = L("geoLoading");
     const lm = tg && tg.LocationManager;
     if (lm && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0")) {
       lm.init(() => {
@@ -457,29 +629,36 @@
     const address = $("#f-address").value.trim();
     document.querySelectorAll(".field").forEach((f) => f.classList.remove("invalid"));
     const invalid = (id, msg) => { $(id).closest(".field").classList.add("invalid"); showFormError(msg); };
-    if (name.length < 2) return invalid("#f-name", "Qabul qiluvchi ismini kiriting");
-    if (!/^\+998\d{9}$/.test(phone)) return invalid("#f-phone", "Telefon raqamni to'liq kiriting: +998 90 123 45 67");
-    if (address.length < 5) return invalid("#f-address", "Yetkazish manzilini to'liqroq kiriting");
+    if (name.length < 2) return invalid("#f-name", L("errName"));
+    if (!/^\+998\d{9}$/.test(phone)) return invalid("#f-phone", L("errPhone"));
+    if (state.co.type === "delivery" && address.length < 5) return invalid("#f-address", L("errAddress"));
+    if (state.co.time === "later" && !state.co.slot) return showFormError(L("errTime"));
 
     const btn = $("#submit-btn");
     btn.disabled = true;
-    btn.textContent = "Yuborilmoqda...";
+    btn.textContent = L("sending");
     try {
       const data = await api("/api/orders", {
         method: "POST",
         body: JSON.stringify({
           name, phone, address,
+          order_type: state.co.type,
+          scheduled_at: state.co.time === "later" ? state.co.slot : "",
           comment: $("#f-comment").value.trim(),
+          promo_code: state.co.promo,
           payment_method: document.querySelector("input[name=payment]:checked").value,
-          items: state.cart.map((i) => ({ product_id: i.pid, variant: i.v, qty: i.qty })),
+          items: rawItems(),
         }),
       });
       const pids = state.cart.map((i) => i.pid);
       state.cart = [];
       saveCart();
       pids.forEach(refreshCardBadge);
-      state.me = { ...(state.me || {}), full_name: name, phone, address };
+      state.me = { ...(state.me || {}), full_name: name, phone, address: address || (state.me || {}).address };
       $("#f-comment").value = "";
+      state.co.promo = ""; $("#f-promo").value = ""; $("#f-promo").disabled = false;
+      $("#promo-apply").textContent = L("apply"); promoMsg("");
+      state.co.slot = "";
       state.currentOrder = data.order;
       $("#success-code").textContent = data.order.code;
       notifyHaptic("success");
@@ -487,26 +666,20 @@
       go("success", false);
     } catch (err) {
       showFormError(err.message);
-      if (/mavjud emas|o'lchami/.test(err.message)) loadMenu();
+      loadMenu();
     } finally {
-      btn.disabled = !canCheckout() && state.cart.length > 0;
-      btn.textContent = "Buyurtmani tasdiqlash";
+      btn.disabled = false;
+      btn.textContent = L("confirm");
     }
   });
 
   $("#track-btn").addEventListener("click", () => { state.history = ["orders"]; openOrder(state.currentOrder.code); });
 
   // ---------------- orders ----------------
-  const STEPS = [
-    ["new", "📝", "Buyurtma berildi"],
-    ["accepted", "✅", "Qabul qilindi"],
-    ["cooking", "👨‍🍳", "Tayyorlanmoqda"],
-    ["delivering", "🛵", "Yetkazilmoqda"],
-    ["delivered", "🎉", "Yetkazildi"],
-  ];
-  const SHORT = { new: "Kutilmoqda", accepted: "Qabul qilindi", cooking: "Tayyorlanmoqda", delivering: "Yetkazilmoqda", delivered: "Yetkazildi", cancelled: "Bekor qilindi" };
+  const STEPS = [["new", "📝"], ["accepted", "✅"], ["cooking", "👨‍🍳"], ["delivering", "🛵"], ["delivered", "🎉"]];
   const isActive = (s) => !["delivered", "cancelled"].includes(s);
   const fmtDate = (s) => (s || "").slice(0, 16).replace(/^(\d{4})-(\d\d)-(\d\d)/, "$3.$2.$1");
+  const shortStatus = (label) => (label || "").replace(/^\S+\s/, "");
 
   async function loadOrders(silent) {
     const list = $("#orders-list");
@@ -515,14 +688,14 @@
       const { orders } = await api("/api/orders");
       if (state.view !== "orders") return;
       if (!orders.length) {
-        list.innerHTML = `<div class="empty"><div class="e-ico">📦</div><p>Hali buyurtmalar yo'q</p>
-          <button class="primary-btn" data-go="menu">Buyurtma berish</button></div>`;
+        list.innerHTML = `<div class="empty"><div class="e-ico">📦</div><p>${esc(L("noOrders"))}</p>
+          <button class="primary-btn" data-go="menu">${esc(L("orderNow"))}</button></div>`;
         return;
       }
       list.innerHTML = orders.map((o) => `
         <button class="order-card" data-code="${esc(o.code)}">
-          <div class="top"><span class="code">${esc(o.code)}</span><span class="pill ${o.status}">${SHORT[o.status]}</span></div>
-          <div class="meta"><span>${fmtDate(o.created_at)} · ${o.items.reduce((s, i) => s + i.qty, 0)} ta</span><b>${money(o.total)}</b></div>
+          <div class="top"><span class="code">${o.order_type === "pickup" ? "🏃" : "🛵"} ${esc(o.code)}</span><span class="pill ${o.status}">${esc(shortStatus(o.status_label))}</span></div>
+          <div class="meta"><span>${fmtDate(o.created_at)}${o.scheduled_at ? " · ⏰ " + esc(fmtDate(o.scheduled_at)) : ""}</span><b>${money(o.total)}</b></div>
         </button>`).join("");
       if (orders.some((o) => isActive(o.status))) startPolling(() => loadOrders(true));
     } catch (e) {
@@ -553,71 +726,113 @@
     }
   }
 
+  function stepLabel(key, o) {
+    if (key === "new") return L("stepNew");
+    if (key === o.status) return shortStatus(o.status_label);
+    // boshqa bosqichlar nomi — joriy holat yorlig'i formatida serverdan kelmaydi, shuning uchun qisqa nomlar
+    const names = state.lang === "ru"
+      ? { accepted: "Принят", cooking: "Готовится", delivering: o.order_type === "pickup" ? "Готов — можно забрать" : "В пути", delivered: o.order_type === "pickup" ? "Выдан" : "Доставлен" }
+      : { accepted: "Qabul qilindi", cooking: "Tayyorlanmoqda", delivering: o.order_type === "pickup" ? "Tayyor — olib keting" : "Yetkazilmoqda", delivered: o.order_type === "pickup" ? "Berildi" : "Yetkazildi" };
+    return names[key];
+  }
+
   function renderOrder(o) {
     const reached = STEPS.findIndex((s) => s[0] === o.status);
+    const steps = STEPS.map(([k, ico]) => [k, k === "delivering" && o.order_type === "pickup" ? "🛍" : ico]);
     const timeline = o.status === "cancelled"
-      ? `<div class="cancel-box"><b>❌ Buyurtma bekor qilindi</b>${o.cancel_reason ? `<div class="muted">Sabab: ${esc(o.cancel_reason)}</div>` : ""}</div>`
-      : `<div class="timeline">${STEPS.map(([key, ico, label], i) => `
+      ? `<div class="cancel-box"><b>${esc(L("cancelledTitle"))}</b>${o.cancel_reason ? `<div class="muted">${esc(L("reason"))}: ${esc(o.cancel_reason)}</div>` : ""}</div>`
+      : `<div class="timeline">${steps.map(([key, ico], i) => `
           <div class="step ${i <= reached ? "done" : ""} ${i === reached && isActive(o.status) ? "current" : ""}">
             <div class="dot">${ico}</div>
-            <div class="label"><b>${label}</b>${o.timeline[key] ? `<small>${o.timeline[key].slice(11, 16)}</small>` : ""}</div>
+            <div class="label"><b>${esc(stepLabel(key, o))}</b>${o.timeline[key] ? `<small>${o.timeline[key].slice(11, 16)}</small>` : ""}</div>
           </div>`).join("")}</div>`;
+
+    let rating = "";
+    if (o.status === "delivered") {
+      rating = o.review
+        ? `<div class="summary rate-box"><b>${esc(L("yourRating"))}:</b> <span class="stars static">${"★".repeat(o.review.rating)}${"☆".repeat(5 - o.review.rating)}</span>${o.review.comment ? `<div class="muted">💬 ${esc(o.review.comment)}</div>` : ""}</div>`
+        : `<div class="summary rate-box" id="rate-box">
+            <b>${esc(L("rateTitle"))}</b>
+            <div class="stars" id="stars">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-star="${n}">★</button>`).join("")}</div>
+            <textarea id="rate-comment" rows="2" maxlength="500" placeholder="${esc(L("ratePh"))}"></textarea>
+            <button class="primary-btn" id="rate-send" disabled>${esc(L("rateSend"))}</button>
+          </div>`;
+    }
 
     $("#order-detail").innerHTML = `
       <div class="od-head">
-        <button class="back" id="od-back">← Buyurtmalar</button>
+        <button class="back" id="od-back">${esc(L("ordersBack"))}</button>
         <h2>${esc(o.code)}</h2>
-        <p>${fmtDate(o.created_at)}</p>
+        <p>${fmtDate(o.created_at)} · ${esc(L(o.order_type === "pickup" ? "pickup" : "delivery"))}${o.scheduled_at ? " · ⏰ " + esc(fmtDate(o.scheduled_at)) : ""}</p>
       </div>
       ${timeline}
+      ${rating}
       <div class="summary od-items">
         ${o.items.map((i) => `<div class="it"><span>${esc(i.name)}${i.variant ? ` (${esc(i.variant)})` : ""} × ${i.qty}</span><span>${money(i.price * i.qty)}</span></div>`).join("")}
-        <div class="row"><span>Yetkazib berish</span><span>${o.delivery_fee ? money(o.delivery_fee) : "bepul"}</span></div>
-        <div class="row total"><span>Jami</span><b>${money(o.total)}</b></div>
+        ${o.discount ? `<div class="row disc"><span>🎁 ${esc(L("discount"))} (${esc(o.promo_code)})</span><span>−${money(o.discount)}</span></div>` : ""}
+        ${o.order_type === "delivery" ? `<div class="row"><span>${esc(L("deliveryFee"))}</span><span>${o.delivery_fee ? money(o.delivery_fee) : esc(L("free"))}</span></div>` : ""}
+        <div class="row total"><span>${esc(L("total"))}</span><b>${money(o.total)}</b></div>
       </div>
       <div class="summary od-info">
         <div>👤 <b>${esc(o.customer_name)}</b></div>
         <div>📞 <b>+998 ${esc(formatLocal(localDigits(o.phone)))}</b></div>
-        <div>📍 <b>${esc(o.address)}</b></div>
+        ${o.order_type === "delivery" ? `<div>📍 <b>${esc(o.address)}</b></div>` : (state.settings.cafe_address ? `<div>🏃 <b>${esc(state.settings.cafe_address)}</b></div>` : "")}
         ${o.comment ? `<div>💬 ${esc(o.comment)}</div>` : ""}
-        <div>💵 To'lov: <b>${o.payment_method === "cash" ? "Naqd" : "Karta"}</b></div>
+        <div>${esc(L("cash"))}</div>
       </div>
-      ${o.status === "new" ? `<button class="danger-btn" id="cancel-order">Buyurtmani bekor qilish</button>` : ""}
-      ${state.settings.phone ? `<p class="muted" style="text-align:center;font-size:13px">Savollar uchun: ${esc(state.settings.phone)}</p>` : ""}`;
+      ${o.status === "new" ? `<button class="danger-btn" id="cancel-order">${esc(L("cancelOrder"))}</button>` : ""}
+      ${state.settings.phone ? `<p class="muted" style="text-align:center;font-size:13px">${esc(L("questions"))}: ${esc(state.settings.phone)}</p>` : ""}`;
 
     $("#od-back").onclick = () => go("orders");
     const cb = $("#cancel-order");
-    if (cb) cb.onclick = () => {
-      const doCancel = async () => {
-        try { const { order } = await api(`/api/orders/${encodeURIComponent(o.code)}/cancel`, { method: "POST" }); renderOrder(order); stopPolling(); toast("Buyurtma bekor qilindi"); }
-        catch (e) { toast(e.message); }
+    if (cb) cb.onclick = () => confirmDialog(L("cancelConfirm"), async () => {
+      try {
+        const { order } = await api(`/api/orders/${encodeURIComponent(o.code)}/cancel`, { method: "POST" });
+        renderOrder(order); stopPolling(); toast(L("cancelledToast"));
+      } catch (e) { toast(e.message); }
+    });
+
+    const stars = $("#stars");
+    if (stars) {
+      let rating = 0;
+      stars.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-star]");
+        if (!b) return;
+        rating = +b.dataset.star;
+        haptic();
+        stars.querySelectorAll("button").forEach((x) => x.classList.toggle("on", +x.dataset.star <= rating));
+        $("#rate-send").disabled = false;
+      });
+      $("#rate-send").onclick = async () => {
+        try {
+          const { order } = await api(`/api/orders/${encodeURIComponent(o.code)}/review`, {
+            method: "POST", body: JSON.stringify({ rating, comment: $("#rate-comment").value.trim() }),
+          });
+          notifyHaptic("success");
+          toast(L("rateThanks"));
+          renderOrder(order);
+        } catch (e) { toast(e.message); }
       };
-      if (tg && tg.showConfirm && initData) tg.showConfirm("Buyurtmani bekor qilasizmi?", (ok) => ok && doCancel());
-      else if (confirm("Buyurtmani bekor qilasizmi?")) doCancel();
-    };
+    }
   }
 
-  function startPolling(fn) {
-    stopPolling();
-    state.pollTimer = setInterval(fn, 8000);
-  }
-  function stopPolling() {
-    if (state.pollTimer) clearInterval(state.pollTimer);
-    state.pollTimer = null;
-  }
+  function startPolling(fn) { stopPolling(); state.pollTimer = setInterval(fn, 8000); }
+  function stopPolling() { if (state.pollTimer) clearInterval(state.pollTimer); state.pollTimer = null; }
 
   // ---------------- init ----------------
   async function init() {
     if (tg) {
       tg.ready();
       tg.expand();
-      try { tg.setHeaderColor("#0d2318"); tg.setBackgroundColor("#0d2318"); tg.setBottomBarColor && tg.setBottomBarColor("#0d2318"); } catch (e) {}
+      try { tg.setHeaderColor("#071a10"); tg.setBackgroundColor("#071a10"); tg.setBottomBarColor && tg.setBottomBarColor("#071a10"); } catch (e) {}
       try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
       tg.BackButton.onClick(back);
     }
+    const tgLang = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code;
+    state.lang = tgLang && tgLang.startsWith("ru") ? "ru" : "uz";
     if (!initData && !devUser) {
-      $("#menu-list").innerHTML = `<div class="empty"><div class="e-ico">📱</div>
-        <p>Iltimos, ushbu ilovani Telegram bot orqali oching.</p></div>`;
+      state.texts = { openInTg: state.lang === "ru" ? "Пожалуйста, откройте приложение через Telegram-бота." : "Iltimos, ushbu ilovani Telegram bot orqali oching." };
+      $("#menu-list").innerHTML = `<div class="empty"><div class="e-ico">📱</div><p>${esc(L("openInTg"))}</p></div>`;
       return;
     }
     await loadMenu();

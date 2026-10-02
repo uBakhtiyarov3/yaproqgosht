@@ -30,6 +30,7 @@ def make_init_data(user_id: int, token: str = None, auth_date: int = None) -> st
 @pytest.fixture
 async def client(aiohttp_client, tmp_path):
     await db.init_db(str(tmp_path / "test.db"))
+    await db.set_setting("mode", "open")  # testlar soatga bog'liq bo'lmasin
     c = await aiohttp_client(create_app(None))
     yield c
     await db.close_db()
@@ -111,13 +112,13 @@ async def test_order_validation(client):
 
 
 async def test_closed_min_order_and_cooldown(client):
-    await db.set_setting("is_open", "0")
+    await db.set_setting("mode", "closed")
     r = await client.post("/api/orders", json=ORDER, headers=H(103))
     assert "qabul qilinmayapti" in (await r.json())["error"]
-    await db.set_setting("is_open", "1")
+    await db.set_setting("mode", "open")
     await db.set_setting("min_order", "100000")
     r = await client.post("/api/orders", json=ORDER, headers=H(103))
-    assert "Minimal" in (await r.json())["error"]
+    assert "minimal" in (await r.json())["error"].lower()
     await db.set_setting("min_order", "0")
     await db.set_setting("delivery_fee", "10000")
     r = await client.post("/api/orders", json=ORDER, headers=H(103))
