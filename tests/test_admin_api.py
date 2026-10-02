@@ -162,3 +162,21 @@ async def test_cors(client):
         assert "Access-Control-Allow-Origin" not in r.headers
     finally:
         config.cors_origins = set()
+
+
+async def test_order_delete_manager_only(client):
+    from tests.test_api import ORDER
+
+    r = await client.post("/api/orders", headers={"X-Telegram-Init-Data": make_init_data(301)}, json=ORDER)
+    code = (await r.json())["order"]["code"]
+    order = await db.get_order_by_code(code)
+    # oddiy foydalanuvchi o'chira olmaydi
+    r = await client.delete(f"/api/admin/orders/{order['id']}", headers={"X-Telegram-Init-Data": make_init_data(301)})
+    assert r.status == 401
+    hdr = await login(client)
+    r = await client.delete(f"/api/admin/orders/{order['id']}", headers=hdr)
+    assert r.status == 200
+    assert await db.get_order(order["id"]) is None
+    assert not await db.get_order_items(order["id"])
+    r = await client.get(f"/api/orders/{code}", headers={"X-Telegram-Init-Data": make_init_data(301)})
+    assert r.status == 404

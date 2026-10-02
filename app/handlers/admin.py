@@ -261,6 +261,39 @@ async def export_period(call: CallbackQuery) -> None:
     await call.answer()
 
 
+# ====================== buyurtmani o'chirish ======================
+
+@router.message(Command("delorder"))
+async def delorder_ask(message: Message) -> None:
+    query = (message.text or "").split(maxsplit=1)[1:] or [""]
+    order = await db.find_order(query[0]) if query[0] else None
+    if not order:
+        await message.answer("🗑 Buyurtmani o'chirish: <code>/delorder YG-123456</code>\n"
+                             "(yoki admin web panel → Buyurtmalar → buyurtma → «O'chirish»)")
+        return
+    await message.answer(
+        f"🗑 <b>{order['code']}</b> buyurtmasi butunlay o'chirilsinmi?\n"
+        f"{h(order['customer_name'])} · {money(order['total'])} · {status_label(order['status'], order['order_type'])}\n\n"
+        "Statistika va hisobotlardan ham o'chadi. Qaytarib bo'lmaydi.",
+        reply_markup=ikb([[("✅ Ha, o'chirish", f"odl:{order['id']}"), ("❌ Yo'q", "odl:no")]]),
+    )
+
+
+@router.callback_query(F.data.startswith("odl:"))
+async def delorder_do(call: CallbackQuery, bot: Bot) -> None:
+    from ..notify import delete_order
+
+    arg = call.data.split(":")[1]
+    order = await db.get_order(int(arg)) if arg.isdigit() else None
+    if not order:
+        await call.message.edit_text("Bekor qilindi." if arg == "no" else "Buyurtma topilmadi.")
+        await call.answer()
+        return
+    await delete_order(bot, order)
+    await call.message.edit_text(f"🗑 Buyurtma <b>{order['code']}</b> o'chirildi.")
+    await call.answer()
+
+
 # ====================== web panel ======================
 
 @router.message(StateFilter(None), F.text == B.WEB_PANEL)

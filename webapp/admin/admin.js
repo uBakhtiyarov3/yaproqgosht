@@ -440,7 +440,16 @@
       ${d.review ? `<div class="section-title">Mijoz bahosi</div><div><span class="stars">${stars(d.review.rating)}</span> ${esc(d.review.comment || "")}</div>` : ""}
       <div class="section-title">Tarix</div>
       <ul class="timeline">${d.log.map((l) => `<li>${esc(dt(l.at))} — ${STATUS[l.status] || esc(l.status)}</li>`).join("")}</ul>
-      <div class="modal-foot">${orderActions(o)}<button class="btn" data-close>Yopish</button></div>`);
+      <div class="modal-foot"><button class="btn danger" id="o-del" title="Keraksiz/test buyurtmani butunlay o'chirish">🗑 O'chirish</button>
+        <span style="flex:1"></span>${orderActions(o)}<button class="btn" data-close>Yopish</button></div>`);
+    $("#o-del", m).onclick = async () => {
+      if (!confirm(`${o.code} buyurtmasi butunlay o'chirilsinmi?\n\nStatistika va hisobotlardan ham o'chadi. Qaytarib bo'lmaydi.`)) return;
+      if (await run(() => api("orders/" + o.id, { method: "DELETE" }), "Buyurtma o'chirildi")) {
+        closeModal();
+        pollOrders();
+        if (S.page === "orders") loadOrders(); else route();
+      }
+    };
     bindOrderActions(m, () => { closeModal(); if (S.page === "orders") loadOrders(); });
   }
 

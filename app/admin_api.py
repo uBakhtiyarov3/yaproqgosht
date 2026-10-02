@@ -25,7 +25,7 @@ from .backup import make_backup
 from .catalog import BADGES, badges_of, discount_active, variant_price
 from .config import config
 from .i18n import OVERRIDES
-from .notify import notify_status_change
+from .notify import delete_order, notify_status_change
 from .orders import public_settings
 from .roles import get_role
 from .texts_admin import catalog, validate
@@ -639,6 +639,16 @@ async def order_status(request: web.Request) -> web.Response:
     return ok(order=_order_row(await db.get_order(order["id"])))
 
 
+@admin_only
+async def order_delete(request: web.Request) -> web.Response:
+    order = await db.get_order(int(request.match_info["id"]))
+    if not order:
+        return err("Topilmadi", 404)
+    await delete_order(request.app.get("bot"), order)
+    log.info("Buyurtma %s o'chirildi (menejer %s)", order["code"], request["admin_id"])
+    return ok()
+
+
 # ====================== baholar, mijozlar, xodimlar ======================
 
 @admin_only
@@ -864,6 +874,7 @@ def setup(app: web.Application) -> None:
     r.add_get("/api/admin/orders", orders)
     r.add_get("/api/admin/orders/{id:\\d+}", order_detail)
     r.add_post("/api/admin/orders/{id:\\d+}/status", order_status)
+    r.add_delete("/api/admin/orders/{id:\\d+}", order_delete)
     r.add_get("/api/admin/reviews", reviews)
     r.add_get("/api/admin/customers", customers)
     r.add_get("/api/admin/staff", staff)

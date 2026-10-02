@@ -97,6 +97,19 @@ async def refresh_staff_messages(bot: Bot, order_id: int) -> None:
             pass
 
 
+async def delete_order(bot: Bot | None, order: dict) -> None:
+    """Buyurtmani o'chiradi va xodimlardagi xabarlarni «o'chirildi» deb yangilaydi (tugmalarsiz)."""
+    messages = await db.delete_order(order["id"])
+    if not bot:
+        return
+    text = f"🗑 <s>Buyurtma {order['code']}</s>\n\nMenejer tomonidan o'chirildi."
+    for m in messages:
+        try:
+            await bot.edit_message_text(text, chat_id=m["chat_id"], message_id=m["message_id"], reply_markup=None)
+        except (TelegramBadRequest, TelegramForbiddenError):
+            pass
+
+
 def customer_status_text(order: dict, lang: str, cafe_address: str = "") -> str | None:
     status, otype = order["status"], order.get("order_type") or "delivery"
     if status not in ("accepted", "cooking", "delivering", "delivered", "cancelled"):

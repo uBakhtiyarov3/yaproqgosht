@@ -731,6 +731,16 @@ async def get_order_messages(order_id: int) -> list[dict]:
     return await fetchall("SELECT * FROM order_messages WHERE order_id = ?", order_id)
 
 
+async def delete_order(order_id: int) -> list[dict]:
+    """Buyurtmani butunlay o'chiradi (faqat menejer). Xodimlardagi xabarlar ro'yxatini qaytaradi."""
+    messages = await get_order_messages(order_id)
+    for table in ("order_items", "order_status_log", "order_messages", "reviews"):
+        await db().execute(f"DELETE FROM {table} WHERE order_id = ?", (order_id,))
+    await db().execute("DELETE FROM orders WHERE id = ?", (order_id,))
+    await db().commit()
+    return messages
+
+
 # ---------------- promo-kodlar ----------------
 
 PROMO_FIELDS = {

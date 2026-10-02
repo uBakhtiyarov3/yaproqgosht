@@ -414,3 +414,25 @@ async def test_orders_go_to_managers_when_no_staff(env):
     await notify_new_order(bot, oid)
     # xodim yo'q — buyurtma yo'qolmasligi uchun menejerga boradi
     assert any("YANGI BUYURTMA" in t for t in s.texts(ADMIN))
+
+
+async def test_delete_order_manager_only(env):
+    bot, dp, s = env
+    for uid in (ADMIN, STAFF, CUSTOMER):
+        await send(bot, dp, uid, "/start")
+    await db.set_role(STAFF, "staff")
+    oid = await db.create_order(CUSTOMER, {"name": "Ali", "phone": "+998901234567", "address": "Toshkent",
+                                           "payment_method": "cash"},
+                                [{"product_id": 1, "name": "X", "variant": "", "price": 15000, "qty": 1}], 0)
+    code = (await db.get_order(oid))["code"]
+    await notify_new_order(bot, oid)
+    # xodim o'chira olmaydi
+    await send(bot, dp, STAFF, f"/delorder {code}")
+    await click(bot, dp, STAFF, f"odl:{oid}")
+    assert await db.get_order(oid)
+    # menejer o'chiradi
+    await send(bot, dp, ADMIN, f"/delorder {code}")
+    s.calls.clear()
+    await click(bot, dp, ADMIN, f"odl:{oid}")
+    assert await db.get_order(oid) is None
+    assert any("o'chirildi" in t for t in s.texts(STAFF))  # xodimdagi xabar yangilandi
