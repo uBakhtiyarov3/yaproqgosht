@@ -24,7 +24,7 @@ from ..keyboards import B, ikb, main_kb, webapp_ready, webapp_url
 from ..notify import notify_new_order, refresh_staff_messages
 from ..orders import OrderError, normalize_phone, place_order, public_settings
 from ..roles import get_role
-from ..utils import PAYMENT_LABELS, STATUS_LABELS, h, money, phone_fmt
+from ..utils import PAYMENT_LABELS, h, money, phone_fmt
 
 router = Router(name="shop")
 log = logging.getLogger(__name__)

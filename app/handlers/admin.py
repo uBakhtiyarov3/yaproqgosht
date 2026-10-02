@@ -24,6 +24,7 @@ from aiogram.types import (
 from .. import db
 from ..config import config
 from ..keyboards import B, cancel_kb, ikb, main_kb, manager_kb
+from ..backup import send_backup
 from ..notify import broadcast, send_post
 from ..roles import IsManager
 from ..utils import PAYMENT_LABELS, STATUS_LABELS, h, money, now
@@ -234,6 +235,15 @@ async def export_period(call: CallbackQuery) -> None:
         caption=f"📥 {PERIODS[period]}: {len(rows)} ta buyurtma",
     )
     await call.answer()
+
+
+# ====================== zaxira nusxa ======================
+
+@router.message(StateFilter(None), F.text == B.BACKUP)
+async def backup(message: Message, bot: Bot) -> None:
+    await message.answer("⏳ Zaxira nusxa tayyorlanmoqda...")
+    await send_backup(bot, [message.chat.id])
+    await message.answer("ℹ️ Har kuni soat 04:00 da zaxira nusxa bosh menejerga avtomatik yuboriladi.")
 
 
 # ====================== mijozlar ======================

@@ -30,49 +30,25 @@
 - 🙋 **Mijozlar**: soni, eng faol mijozlar, ID/telefon/username bo'yicha qidirish.
 - ⚙️ **Sozlamalar**: buyurtma qabul qilishni to'xtatish/ochish, yetkazish narxi, minimal summa, telefon, ish vaqti.
 - 📥 **Hisobot**: buyurtmalarni CSV qilib yuklab olish (Excel to'g'ri ochadi).
+- 💾 **Zaxira nusxa**: baza + rasmlar `.zip` — tugma orqali va har kuni avtomatik.
 
-## Tez ishga tushirish
+## Ishga tushirish
+
+📘 **Serverga bepul va doimiy o'rnatish bo'yicha to'liq qo'llanma: [DEPLOY.md](DEPLOY.md)**
+(Oracle Cloud / Google Cloud bepul server + domen + `bash deploy/install.sh`).
+
+Lokal kompyuterda sinash:
 
 ```bash
-git clone <repo> && cd yaproqgosht
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env      # keyin .env ni to'ldiring
+cp .env.example .env      # BOT_TOKEN va ADMIN_IDS ni yozing
 python main.py
 ```
 
-`.env` fayli:
-
-```env
-BOT_TOKEN=<BotFather bergan token>
-ADMIN_IDS=2076925033
-WEBAPP_URL=https://<sizning-domeningiz>
-PORT=8080
-DEBUG=0
-```
+`WEBAPP_URL` bo'lmasa ham bot ishlaydi — buyurtma bot ichida (inline tugmalar) beriladi. Mini App uchun https manzil kerak: tez test uchun `cloudflared tunnel --url http://localhost:8080` bergan manzilni `WEBAPP_URL` ga yozing.
 
 > ⚠️ Tokenni hech qachon repoga commit qilmang — `.env` `.gitignore` ga qo'shilgan.
-
-### Mini App uchun HTTPS manzil
-
-Telegram mini ilovani faqat **https** manzilda ochadi. Bot o'zi `PORT` (8080) da web server ko'taradi, unga https manzil kerak:
-
-**Test uchun (domensiz, 1 daqiqada)** — Cloudflare tunnel:
-```bash
-# boshqa terminalda
-cloudflared tunnel --url http://localhost:8080
-# chiqqan https://xxxx.trycloudflare.com manzilini .env dagi WEBAPP_URL ga yozing va botni qayta ishga tushiring
-```
-(`ngrok http 8080` ham bo'ladi.)
-
-**Doimiy ishlatish uchun** — VPS + domen + Caddy (SSL avtomatik):
-```
-# /etc/caddy/Caddyfile
-bot.yaproqgosht.uz {
-    reverse_proxy localhost:8080
-}
-```
-Keyin `docker compose up -d --build` (baza va rasmlar `./data` papkasida saqlanadi).
 
 ## Test qilish
 
@@ -102,6 +78,8 @@ app/handlers/shop.py   — bot ichida menyu, savat, rasmiylashtirish, buyurtmala
 app/handlers/common.py — /start, aloqa, fikr-mulohaza
 app/handlers/staff.py  — xodim kabineti, holat tugmalari
 app/handlers/admin.py  — menejer paneli
+app/backup.py         — zaxira nusxa (qo'lda va har kuni 04:00 da)
+deploy/               — install.sh, update.sh, Caddyfile (HTTPS)
 webapp/               — Mini App (HTML/CSS/JS) va mahsulot rasmlari
 tests/                — API va bot oqimlari testlari
 ```

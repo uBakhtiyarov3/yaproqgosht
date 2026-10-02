@@ -11,7 +11,7 @@ from aiohttp import web
 from . import db
 from .config import config
 from .notify import notify_new_order, refresh_staff_messages
-from .orders import OrderError, normalize_phone, place_order, public_settings  # noqa: F401
+from .orders import OrderError, place_order, public_settings
 from .utils import ACTIVE_STATUSES, STATUS_LABELS, STATUSES
 
 log = logging.getLogger(__name__)

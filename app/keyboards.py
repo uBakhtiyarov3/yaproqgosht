@@ -47,6 +47,7 @@ class B:
     SETTINGS = "⚙️ Sozlamalar"
     EXPORT = "📥 Hisobot (CSV)"
     USERS = "🙋 Mijozlar"
+    BACKUP = "💾 Zaxira nusxa"
 
     CANCEL = "🚫 Bekor qilish"
 
@@ -101,6 +102,7 @@ def manager_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=B.MENU_EDIT), KeyboardButton(text=B.BROADCAST)],
             [KeyboardButton(text=B.STAFF_LIST), KeyboardButton(text=B.USERS)],
             [KeyboardButton(text=B.SETTINGS), KeyboardButton(text=B.EXPORT)],
+            [KeyboardButton(text=B.BACKUP)],
             [KeyboardButton(text=B.STAFF), KeyboardButton(text=B.BACK)],
         ],
         resize_keyboard=True,

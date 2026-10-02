@@ -282,3 +282,13 @@ async def test_checkout_cancel_keeps_cart(env):
     s.calls.clear()
     await send(bot, dp, CUSTOMER, "📦 Buyurtmalarim")   # holat tozalangan, tugmalar ishlaydi
     assert any("buyurtmalar yo'q" in t for t in s.texts(CUSTOMER))
+
+
+async def test_backup(env):
+    import io, zipfile
+    bot, dp, s = env
+    s.calls.clear()
+    await send(bot, dp, ADMIN, "💾 Zaxira nusxa")
+    doc = next(c for c in s.calls if type(c).__name__ == "SendDocument")
+    zf = zipfile.ZipFile(io.BytesIO(doc.document.data))
+    assert "data/bot.db" in zf.namelist()

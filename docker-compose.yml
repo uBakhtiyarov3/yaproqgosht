@@ -3,7 +3,30 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8080:8080"
+    environment:
+      - PORT=8080
     volumes:
-      - ./data:/app/data   # baza va yuklangan rasmlar shu yerda saqlanadi
+      - ./data:/app/data            # baza, rasmlar — konteyner qayta qurilsa ham saqlanadi
+    expose:
+      - "8080"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  caddy:                            # HTTPS (Mini App uchun majburiy)
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - bot
+
+volumes:
+  caddy_data:
+  caddy_config:

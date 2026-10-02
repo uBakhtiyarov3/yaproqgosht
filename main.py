@@ -8,6 +8,7 @@ from aiogram.types import BotCommand, MenuButtonWebApp, WebAppInfo
 from aiohttp import web
 
 from app import db
+from app.backup import daily_backup_loop
 from app.config import config
 from app.handlers import setup_routers
 from app.keyboards import webapp_ready, webapp_url
@@ -50,7 +51,9 @@ async def main() -> None:
     try:
         await setup_bot_ui(bot)
         await bot.delete_webhook(drop_pending_updates=False)
+        backup_task = asyncio.create_task(daily_backup_loop(bot))
         await dp.start_polling(bot)
+        backup_task.cancel()
     finally:
         await runner.cleanup()
         await db.close_db()
