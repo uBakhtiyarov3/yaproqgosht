@@ -15,10 +15,42 @@ from .utils import format_order, h
 log = logging.getLogger(__name__)
 
 
+async def manager_ids() -> set[int]:
+    return set(config.admin_ids) | {u["id"] for u in await db.get_staff() if u["role"] == "manager"}
+
+
 async def staff_recipients() -> list[int]:
-    ids = {u["id"] for u in await db.get_staff()}
-    ids |= config.admin_ids
-    return sorted(ids)
+    """Buyurtma xabarlari (tasdiqlash, yetkazish tugmalari) faqat xodimlarga boradi.
+    Menejerlarga bormaydi — ular faqat bajarilgan buyurtma haqida hisobot oladi.
+    Bitta ham xodim bo'lmasa, buyurtma yo'qolmasligi uchun menejerlarga yuboriladi."""
+    managers = await manager_ids()
+    ids = {u["id"] for u in await db.get_staff() if u["role"] == "staff"} - managers
+    return sorted(ids or managers)
+
+
+async def notify_managers_done(bot: Bot, order: dict) -> None:
+    """Buyurtma bajarilganda menejerlarga qisqa hisobot: summa va bugungi tushum."""
+    from .utils import money, now, status_label
+
+    since = now().strftime("%Y-%m-%d 00:00:00")
+    row = await db.fetchone(
+        "SELECT COUNT(*) c, COALESCE(SUM(total), 0) s FROM orders WHERE status = 'delivered' AND created_at >= ?",
+        since,
+    )
+    otype = order.get("order_type") or "delivery"
+    text = (
+        f"✅ <b>Buyurtma bajarildi</b> — <code>{order['code']}</code>\n"
+        f"{status_label('delivered', otype)}\n\n"
+        f"💰 Tushum: <b>{money(order['total'])}</b>"
+        + (f" (chegirma {money(order['discount'])})" if order.get("discount") else "")
+        + (f"\n👷 Xodim: {h(order['staff_name'])}" if order.get("staff_name") else "")
+        + f"\n\n📊 Bugun: <b>{row['c']}</b> ta buyurtma, jami <b>{money(row['s'])}</b>"
+    )
+    for chat_id in await manager_ids():
+        try:
+            await bot.send_message(chat_id, text)
+        except (TelegramForbiddenError, TelegramBadRequest):
+            pass
 
 
 async def notify_new_order(bot: Bot, order_id: int, notify_customer: bool = True) -> None:
@@ -82,6 +114,8 @@ def customer_status_text(order: dict, lang: str, cafe_address: str = "") -> str 
 async def notify_status_change(bot: Bot, order_id: int) -> None:
     order = await db.get_order(order_id)
     await refresh_staff_messages(bot, order_id)
+    if order["status"] == "delivered":
+        await notify_managers_done(bot, order)
     lang = await lang_of(order["user_id"])
     text = customer_status_text(order, lang, await db.get_setting("cafe_address"))
     if not text:
@@ -107,8 +141,7 @@ async def notify_review(bot: Bot, order_id: int) -> None:
     )
     if review["comment"]:
         text += f"\n💬 {h(review['comment'])}"
-    managers = set(config.admin_ids) | {u["id"] for u in await db.get_staff() if u["role"] == "manager"}
-    for chat_id in managers:
+    for chat_id in await manager_ids():
         try:
             await bot.send_message(chat_id, text)
         except (TelegramForbiddenError, TelegramBadRequest):

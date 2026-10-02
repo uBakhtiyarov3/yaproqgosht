@@ -108,11 +108,17 @@ async def test_full_order_lifecycle(env):
     s.calls.clear()
     await notify_new_order(bot, oid)
     assert any("YANGI BUYURTMA" in t for t in s.texts(STAFF))
-    assert any("YANGI BUYURTMA" in t for t in s.texts(ADMIN))
+    # menejerga tasdiqlash/yetkazish xabarlari bormaydi
+    assert not any("YANGI BUYURTMA" in t for t in s.texts(ADMIN))
 
     for st in ("accepted", "cooking", "delivering", "delivered"):
         await click(bot, dp, STAFF, f"ost:{oid}:{st}")
         assert (await db.get_order(oid))["status"] == st
+        if st != "delivered":
+            assert not any("bajarildi" in t for t in s.texts(ADMIN))
+    # bajarilgach menejerga faqat hisobot: summa va bugungi tushum
+    done = [t for t in s.texts(ADMIN) if "Buyurtma bajarildi" in t]
+    assert len(done) == 1 and "30 000 so'm" in done[0] and "Bugun" in done[0]
     assert (await db.get_order(oid))["staff_id"] == STAFF
     assert any("yetkazildi" in t for t in s.texts(CUSTOMER))
     # eski tugmani qayta bosish holatni buzmaydi
@@ -396,3 +402,15 @@ async def test_admin_promo_schedule_discount(env):
     st = await db.get_settings()
     assert st["pickup_enabled"] == "0" and st["delivery_enabled"] == "1"
     await send(bot, dp, ADMIN, "⭐ Baholar")
+
+
+async def test_orders_go_to_managers_when_no_staff(env):
+    bot, dp, s = env
+    await send(bot, dp, CUSTOMER, "/start")
+    oid = await db.create_order(CUSTOMER, {"name": "Ali", "phone": "+998901234567", "address": "Toshkent",
+                                           "payment_method": "cash"},
+                                [{"product_id": 1, "name": "X", "variant": "", "price": 15000, "qty": 1}], 0)
+    s.calls.clear()
+    await notify_new_order(bot, oid)
+    # xodim yo'q — buyurtma yo'qolmasligi uchun menejerga boradi
+    assert any("YANGI BUYURTMA" in t for t in s.texts(ADMIN))
