@@ -175,6 +175,20 @@ async def product_view(user_id: int, pid: int, v: int, q: int):
     return "\n".join(lines), _kb(rows), p["image"]
 
 
+@router.message(StateFilter(None), F.text == B.MENU)
+async def open_mini_app(message: Message) -> None:
+    if not webapp_ready():
+        text, kb = await categories_view(message.from_user.id)
+        await message.answer(text, reply_markup=kb)
+        return
+    await message.answer(
+        "🍔 Mini ilovani ochish uchun pastdagi tugmani bosing 👇",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="🍔 Mini ilovani ochish", web_app=WebAppInfo(url=webapp_url()))
+        ]]),
+    )
+
+
 @router.message(StateFilter(None), F.text == B.BOT_MENU)
 @router.message(Command("menu"))
 async def menu_cmd(message: Message, state: FSMContext) -> None:
