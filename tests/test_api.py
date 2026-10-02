@@ -1,3 +1,4 @@
+import re
 import hashlib
 import hmac
 import json
@@ -69,7 +70,7 @@ async def test_create_order_flow(client):
     assert r.status == 200, data
     o = data["order"]
     assert o["total"] == 40000 and o["status"] == "new"
-    assert o["code"].startswith("YG-") and len(o["code"]) == 19
+    assert o["code"].startswith("YG-") and re.fullmatch(r"YG-\d{6}", o["code"])
     assert o["phone"] == "+998901234567"
     # profil saqlandi
     me = await (await client.get("/api/me", headers=H(100))).json()
@@ -141,7 +142,8 @@ async def test_stats(client):
     s = await db.stats(None)
     assert s["revenue"] == 40000 and s["by_status"]["delivered"] == 1
     assert s["top"][0]["name"] == "Klassik hot-dog"
-    assert (await db.find_order(o["code"][-4:]))["id"] == o["id"]
+    assert (await db.find_order(o["code"][3:]))["id"] == o["id"]
+    assert (await db.find_order(o["code"].lower()))["id"] == o["id"]
     assert len(await db.all_orders_for_export(None)) == 1
 
 

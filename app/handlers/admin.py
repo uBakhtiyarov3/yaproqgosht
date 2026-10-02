@@ -192,7 +192,7 @@ async def _orders_list(message: Message, kind: str, edit: bool = False) -> None:
     ]
     buttons.append([("🔄 Faol", "ol:active"), ("🎉 Yetkazilgan", "ol:done"), ("❌ Bekor", "ol:cancel")])
     text = f"<b>{title}</b> ({len(rows)})\n\nBatafsil ko'rish uchun buyurtmani tanlang.\n" \
-           "ID bo'yicha qidirish: /order YG-261002-7K3Q-9XM2"
+           "ID bo'yicha qidirish: /order YG-482917"
     if not rows:
         text = f"<b>{title}</b>\n\nHozircha bo'sh."
     if edit:

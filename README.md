@@ -9,7 +9,7 @@
 - **Bot ichida buyurtma (Mini Appsiz)**: «📋 Menyu» → kategoriya → mahsulot kartasi (rasm, o'lcham, ➖/➕ soni) → «🛒 Savat» (sonini o'zgartirish, tozalash) → rasmiylashtirish: ism, telefon («📱 Raqamimni yuborish» tugmasi yoki yozib), manzil (matn yoki «📍 Joylashuv»), izoh, to'lov (Naqd / Karta — tez kunda), tasdiqlash. Oldingi ism, telefon va manzil tugma bo'lib chiqadi. «📦 Buyurtmalarim» da holat, bekor qilish va «🔁 Qayta buyurtma».
 - **Mini App**: kategoriyalar, rasmli mahsulotlar va narxlar, o'lcham tanlash (O'rta/Katta, 60g/80g), savat.
 - **Rasmiylashtirish**: qabul qiluvchining ismi, telefon (`+998` prefiksi doim turadi, raqam o'zi `+998 90 123 45 67` ko'rinishiga keladi), manzil, ixtiyoriy izoh va joylashuv. To'lov: **Naqd** (faol) va **Karta** (yopiq, "Tez kunda" belgisi bilan).
-- Har bir buyurtmaga **unikal uzun ID** beriladi: `YG-261002-7K3Q-9XM2`.
+- Har bir buyurtmaga **unikal ID** beriladi: `YG-482917`.
 - **Holatni kuzatish** (avtomatik yangilanadi): Buyurtma berildi → Qabul qilindi → Tayyorlanmoqda → Yetkazilmoqda → Yetkazildi. Har bir o'zgarishda bot xabar ham yuboradi.
 - Hali qabul qilinmagan buyurtmani mijoz o'zi bekor qila oladi.
 - Botga yozilgan erkin xabarlar menejerga boradi, menejer reply qilib javob beradi.

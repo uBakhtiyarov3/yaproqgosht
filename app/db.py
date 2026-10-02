@@ -4,7 +4,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from .utils import ACTIVE_STATUSES, now, now_str
+from .utils import ACTIVE_STATUSES, now_str
 
 _db: aiosqlite.Connection | None = None
 
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS products (
 
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT NOT NULL UNIQUE,                  -- unikal uzun ID: YG-261002-7K3Q-9XM2
+    code TEXT NOT NULL UNIQUE,                  -- unikal ID: YG-482917
     user_id INTEGER NOT NULL REFERENCES users(id),
     customer_name TEXT NOT NULL,
     phone TEXT NOT NULL,
@@ -422,13 +422,9 @@ async def cart_count(user_id: int) -> int:
 
 # ---------------- orders ----------------
 
-# chalkashtiradigan belgilarsiz (0/O, 1/I/L yo'q)
-CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
-
-
 def generate_order_code() -> str:
-    rnd = "".join(secrets.choice(CODE_ALPHABET) for _ in range(8))
-    return f"YG-{now().strftime('%y%m%d')}-{rnd[:4]}-{rnd[4:]}"
+    """Qisqa va o'qish oson ID: YG-482917 (6 ta raqam)."""
+    return f"YG-{secrets.randbelow(900_000) + 100_000}"
 
 
 async def create_order(user_id: int, data: dict, items: list[dict], delivery_fee: int) -> int:
@@ -477,7 +473,8 @@ async def find_order(query: str) -> dict | None:
     """Unikal kod (YG-...) yoki ichki raqam bo'yicha qidiradi."""
     q = query.strip().lstrip("#")
     if q.isdigit():
-        return await get_order(int(q))
+        # "482917" -> YG-482917; aks holda ichki raqam
+        return await get_order_by_code(f"YG-{q}") or await get_order(int(q))
     order = await get_order_by_code(q)
     if not order and len(q) >= 4:
         # kodning bir qismi bo'yicha (masalan oxirgi 4 belgi)

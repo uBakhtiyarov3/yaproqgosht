@@ -88,7 +88,7 @@ async def today(message: Message) -> None:
 @router.message(Command("order"))
 async def show_order(message: Message, command: CommandObject) -> None:
     if not command.args:
-        await message.answer("Foydalanish: /order YG-261002-7K3Q-9XM2 (yoki kodning oxirgi qismi)")
+        await message.answer("Foydalanish: /order YG-482917 (yoki faqat 482917)")
         return
     order = await db.find_order(command.args)
     if not order:
