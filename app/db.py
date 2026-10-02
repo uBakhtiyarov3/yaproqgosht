@@ -88,6 +88,15 @@ CREATE TABLE IF NOT EXISTS order_messages (
     message_id INTEGER NOT NULL
 );
 
+-- bot ichidagi savat (Mini App savati brauzerda saqlanadi)
+CREATE TABLE IF NOT EXISTS cart_items (
+    user_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    variant INTEGER NOT NULL DEFAULT 0,
+    qty INTEGER NOT NULL,
+    PRIMARY KEY (user_id, product_id, variant)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -363,6 +372,52 @@ async def get_menu() -> list[dict]:
                 ],
             })
     return result
+
+
+# ---------------- bot savati ----------------
+
+async def cart_add(user_id: int, product_id: int, variant: int, qty: int) -> None:
+    await execute(
+        "INSERT INTO cart_items(user_id, product_id, variant, qty) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(user_id, product_id, variant) DO UPDATE SET qty = MIN(50, qty + excluded.qty)",
+        user_id, product_id, variant, qty,
+    )
+
+
+async def cart_change(user_id: int, product_id: int, variant: int, delta: int) -> None:
+    await db().execute(
+        "UPDATE cart_items SET qty = MIN(50, qty + ?) WHERE user_id = ? AND product_id = ? AND variant = ?",
+        (delta, user_id, product_id, variant),
+    )
+    await db().execute("DELETE FROM cart_items WHERE user_id = ? AND qty <= 0", (user_id,))
+    await db().commit()
+
+
+async def cart_clear(user_id: int) -> None:
+    await execute("DELETE FROM cart_items WHERE user_id = ?", user_id)
+
+
+async def cart_get(user_id: int) -> list[dict]:
+    """Savat pozitsiyalari joriy narxlar bilan; mavjud bo'lmaganlari avtomatik olib tashlanadi."""
+    rows = await fetchall("SELECT * FROM cart_items WHERE user_id = ? ORDER BY rowid", user_id)
+    items = []
+    for r in rows:
+        p = await get_product(r["product_id"])
+        cat = await get_category(p["category_id"]) if p else None
+        if not p or not p["is_available"] or not cat or not cat["is_active"] or r["variant"] >= len(p["variants"]):
+            await execute("DELETE FROM cart_items WHERE user_id = ? AND product_id = ? AND variant = ?",
+                          user_id, r["product_id"], r["variant"])
+            continue
+        v = p["variants"][r["variant"]]
+        items.append({
+            "product_id": p["id"], "variant": r["variant"], "qty": r["qty"],
+            "name": p["name"], "variant_name": v["name"], "price": v["price"],
+        })
+    return items
+
+
+async def cart_count(user_id: int) -> int:
+    return await scalar("SELECT COALESCE(SUM(qty), 0) FROM cart_items WHERE user_id = ?", user_id)
 
 
 # ---------------- orders ----------------

@@ -13,6 +13,8 @@ from aiogram.types import (
     BufferedInputFile,
     CallbackQuery,
     FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     KeyboardButton,
     KeyboardButtonRequestUsers,
     Message,
@@ -22,7 +24,7 @@ from aiogram.types import (
 from .. import db
 from ..config import config
 from ..keyboards import B, cancel_kb, ikb, main_kb, manager_kb
-from ..notify import broadcast
+from ..notify import broadcast, send_post
 from ..roles import IsManager
 from ..utils import PAYMENT_LABELS, STATUS_LABELS, h, money, now
 
@@ -52,6 +54,8 @@ class RenameCategory(StatesGroup):
 
 class Broadcast(StatesGroup):
     message = State()
+    preview = State()
+    buttons = State()
 
 
 class AddStaff(StatesGroup):
@@ -299,36 +303,143 @@ async def user_find(message: Message, state: FSMContext) -> None:
 
 # ====================== rassilka ======================
 
+_album_buffer: dict[tuple[int, str], list[int]] = {}
+URL_RE = re.compile(r"^(.+?)\s*[-|–—]\s*((?:https?://|tg://)\S+)$")
+
+
+def _broadcast_markup(data: dict) -> InlineKeyboardMarkup | None:
+    rows = [[InlineKeyboardButton(text=t, url=u)] for t, u in data.get("buttons", [])]
+    if data.get("order_btn"):
+        rows.append([InlineKeyboardButton(text="📋 Buyurtma berish", callback_data="sh:cats")])
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+def _url_buttons(markup: InlineKeyboardMarkup | None) -> list[list[str]]:
+    """Kanal postidagi URL tugmalarni saqlab qolish uchun."""
+    if not markup:
+        return []
+    return [[b.text, b.url] for row in markup.inline_keyboard for b in row if b.url]
+
+
 @router.message(StateFilter(None), F.text == B.BROADCAST)
 async def broadcast_start(message: Message, state: FSMContext) -> None:
     count = len(await db.all_user_ids())
     await state.set_state(Broadcast.message)
     await message.answer(
         f"📢 <b>Barchaga xabar yuborish</b> ({count} ta foydalanuvchi)\n\n"
-        "Yubormoqchi bo'lgan xabaringizni jo'nating: matn, rasm, video, "
-        "rasm+izoh — istalgan formatda. Xabar aynan shunday ko'rinishda yuboriladi.",
+        "Postni shu yerga yuboring — u qanday bo'lsa, foydalanuvchilarga xuddi shunday boradi:\n"
+        "• matn, rasm yoki video (izohi bilan)\n"
+        "• 🖼 albom — bir nechta rasm/video birga\n"
+        "• ↪️ kanaldagi <b>tayyor rasmli postni forward qiling</b> (tugmalari ham saqlanadi)\n\n"
+        "Keyin xohlasangiz havola tugma yoki «Buyurtma berish» tugmasini qo'shasiz.",
         reply_markup=cancel_kb(),
     )
 
 
 @router.message(Broadcast.message)
-async def broadcast_preview(message: Message, state: FSMContext) -> None:
-    await state.update_data(chat_id=message.chat.id, message_id=message.message_id)
-    await message.answer("👆 Xabar shunday ko'rinadi. Yuboraymi?",
-                         reply_markup=ikb([[("✅ Yuborish", "bc:yes"), ("🚫 Bekor", "bc:no")]]))
+async def broadcast_receive(message: Message, state: FSMContext, bot: Bot) -> None:
+    if message.media_group_id:
+        key = (message.chat.id, message.media_group_id)
+        first = key not in _album_buffer
+        _album_buffer.setdefault(key, []).append(message.message_id)
+        if not first:
+            return
+        await asyncio.sleep(1.5)  # albomning qolgan qismlari kelishini kutamiz
+        ids = sorted(_album_buffer.pop(key, []))
+    else:
+        ids = [message.message_id]
+    forwarded = bool(message.forward_origin)
+    await state.update_data(
+        chat_id=message.chat.id, message_ids=ids, mode="copy", order_btn=False,
+        buttons=_url_buttons(message.reply_markup), forwarded=forwarded,
+    )
+    await state.set_state(Broadcast.preview)
+    await _broadcast_preview(message, state, bot)
 
 
-@router.callback_query(F.data.startswith("bc:"), Broadcast.message)
+async def _broadcast_preview(message: Message, state: FSMContext, bot: Bot) -> None:
+    data = await state.get_data()
+    album = len(data["message_ids"]) > 1
+    markup = _broadcast_markup(data)
+    await message.answer("👇 <b>Foydalanuvchilar ko'radigan ko'rinish:</b>", reply_markup=cancel_kb())
+    await send_post(bot, message.chat.id, data["chat_id"], data["message_ids"], data["mode"], markup)
+
+    count = len(await db.all_user_ids())
+    notes = [f"👥 Qabul qiluvchilar: <b>{count}</b>",
+             f"Turi: {'🖼 albom (' + str(len(data['message_ids'])) + ' ta)' if album else '📄 bitta post'}",
+             f"Rejim: {'↪️ Forward (manba ko`rinadi)' if data['mode'] == 'forward' else '📋 Nusxa (bot nomidan)'}"]
+    can_buttons = data["mode"] == "copy" and not album
+    if not can_buttons:
+        notes.append("ℹ️ Albom va forward rejimida qo'shimcha tugmalar biriktirilmaydi.")
+    rows = [[(f"✅ Yuborish ({count} ta)", "bc:send")]]
+    if can_buttons:
+        rows.append([("🔗 Havola tugma qo'shish", "bc:link"),
+                     (("✅ " if data.get("order_btn") else "➕ ") + "«Buyurtma berish» tugmasi", "bc:order")])
+        if data.get("buttons"):
+            rows.append([("🗑 Havola tugmalarni o'chirish", "bc:clear")])
+    rows.append([("📋 Nusxa rejimi" if data["mode"] == "forward" else "↪️ Forward rejimi", "bc:mode")])
+    rows.append([("🚫 Bekor qilish", "bc:no")])
+    await message.answer("\n".join(notes), reply_markup=ikb(rows))
+
+
+@router.callback_query(F.data.in_({"bc:order", "bc:mode", "bc:clear"}), Broadcast.preview)
+async def broadcast_toggle(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    data = await state.get_data()
+    if call.data == "bc:order":
+        await state.update_data(order_btn=not data.get("order_btn"))
+    elif call.data == "bc:mode":
+        await state.update_data(mode="copy" if data["mode"] == "forward" else "forward")
+    else:
+        await state.update_data(buttons=[])
+    await call.message.delete()
+    await call.answer()
+    await _broadcast_preview(call.message, state, bot)
+
+
+@router.callback_query(F.data == "bc:link", Broadcast.preview)
+async def broadcast_link_start(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(Broadcast.buttons)
+    await call.message.answer(
+        "🔗 Tugmalarni yuboring — har bir qatorda bitta:\n"
+        "<code>Matn - https://havola</code>\n\n"
+        "Masalan:\n<code>Instagram - https://instagram.com/yaproqgosht\n"
+        "Kanalimiz - https://t.me/yaproqgosht</code>",
+        reply_markup=cancel_kb(),
+    )
+    await call.answer()
+
+
+@router.message(Broadcast.buttons, F.text)
+async def broadcast_link_save(message: Message, state: FSMContext, bot: Bot) -> None:
+    buttons = []
+    for line in message.text.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = URL_RE.match(line)
+        if not m:
+            await message.answer(f"❗️ Format noto'g'ri: <code>{h(line)}</code>\nTo'g'ri: <code>Matn - https://havola</code>")
+            return
+        buttons.append([m.group(1)[:40], m.group(2)])
+    data = await state.get_data()
+    await state.update_data(buttons=(data.get("buttons") or []) + buttons)
+    await state.set_state(Broadcast.preview)
+    await _broadcast_preview(message, state, bot)
+
+
+@router.callback_query(F.data.in_({"bc:send", "bc:no"}), Broadcast.preview)
 async def broadcast_confirm(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
     await state.clear()
     if call.data == "bc:no":
         await call.message.edit_text("Rassilka bekor qilindi.")
         await call.message.answer("Menejer paneli", reply_markup=manager_kb())
+        await call.answer()
         return
     await call.message.edit_text("⏳ Yuborilmoqda...")
     await call.message.answer("Rassilka fonda ketmoqda, tugagach xabar beraman.", reply_markup=manager_kb())
     await call.answer()
+    markup = _broadcast_markup(data)
 
     async def run():
         async def progress(i, total):
@@ -336,10 +447,15 @@ async def broadcast_confirm(call: CallbackQuery, state: FSMContext, bot: Bot) ->
                 await call.message.edit_text(f"⏳ Yuborilmoqda... {i}/{total}")
             except Exception:
                 pass
-        ok, fail = await broadcast(bot, data["chat_id"], data["message_id"], progress)
+        ok, fail = await broadcast(bot, data["chat_id"], data["message_ids"], data["mode"], markup, progress)
         await call.message.edit_text(f"✅ Rassilka tugadi!\n\nYuborildi: {ok}\nYetib bormadi: {fail}")
 
     asyncio.create_task(run())
+
+
+@router.callback_query(F.data.startswith("bc:"))
+async def broadcast_stale(call: CallbackQuery) -> None:
+    await call.answer("Bu rassilka eskirgan. «📢 Xabar yuborish» ni qaytadan bosing.", show_alert=True)
 
 
 # ====================== xodimlar ======================

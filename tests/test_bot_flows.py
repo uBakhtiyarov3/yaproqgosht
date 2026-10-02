@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
 from aiogram.methods import TelegramMethod
-from aiogram.types import CallbackQuery, File, Chat, Message, PhotoSize, Update, User
+from aiogram.types import CallbackQuery, Contact, File, Location, Chat, Message, PhotoSize, Update, User
 
 from app import db
 from app.handlers import setup_routers
@@ -49,8 +49,8 @@ async def env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "admin_ids", {ADMIN})
     monkeypatch.setattr(config, "uploads_dir", tmp_path / "uploads")
     # modul darajasidagi routerlarni har testda qayta ulash uchun ajratamiz
-    from app.handlers import admin, common, staff
-    for r in (admin.router, staff.router, common.router, common.fallback_router):
+    from app.handlers import admin, common, shop, staff
+    for r in (shop.router, admin.router, staff.router, common.router, common.fallback_router):
         r._parent_router = None
     session = FakeSession()
     bot = Bot("42:TEST", session=session, default=DefaultBotProperties(parse_mode="HTML"))
@@ -164,10 +164,17 @@ async def test_settings_and_broadcast(env):
     assert await db.get_setting("delivery_fee") == "12000"
     await send(bot, dp, ADMIN, "📢 Xabar yuborish")
     await send(bot, dp, ADMIN, "Aksiya! Bugun 20% chegirma")
-    await click(bot, dp, ADMIN, "bc:yes")
+    await click(bot, dp, ADMIN, "bc:order")
+    await click(bot, dp, ADMIN, "bc:link")
+    await send(bot, dp, ADMIN, "Instagram - https://instagram.com/yaproqgosht")
+    s.calls.clear()
+    await click(bot, dp, ADMIN, "bc:send")
     import asyncio
     await asyncio.sleep(0.3)
-    assert any(type(c).__name__ == "CopyMessage" and c.chat_id == CUSTOMER for c in s.calls)
+    sent = [c for c in s.calls if type(c).__name__ == "CopyMessage" and c.chat_id == CUSTOMER]
+    assert sent
+    kb = sent[0].reply_markup.inline_keyboard
+    assert kb[0][0].url == "https://instagram.com/yaproqgosht" and kb[1][0].callback_data == "sh:cats"
 
 
 async def test_feedback_and_reply(env):
@@ -200,3 +207,78 @@ async def test_category_management(env):
     await click(bot, dp, ADMIN, "pmv:1:1")
     await click(bot, dp, ADMIN, f"cdy:{cat['id']}")
     assert await db.get_category(cat["id"]) is None
+
+
+async def test_album_broadcast(env):
+    import asyncio
+    bot, dp, s = env
+    await send(bot, dp, CUSTOMER, "/start")
+    await send(bot, dp, ADMIN, "📢 Xabar yuborish")
+    photo = [PhotoSize(file_id="f", file_unique_id="u", width=1, height=1)]
+    await asyncio.gather(*[
+        send(bot, dp, ADMIN, None, photo=photo, media_group_id="mg1") for _ in range(3)
+    ])
+    s.calls.clear()
+    await click(bot, dp, ADMIN, "bc:send")
+    await asyncio.sleep(0.3)
+    sent = [c for c in s.calls if type(c).__name__ == "CopyMessages" and c.chat_id == CUSTOMER]
+    assert sent and len(sent[0].message_ids) == 3
+
+
+async def test_shop_order_in_bot(env):
+    bot, dp, s = env
+    await send(bot, dp, STAFF, "/start")
+    await db.set_role(STAFF, "staff")
+    await send(bot, dp, CUSTOMER, "/start")
+    await send(bot, dp, CUSTOMER, "📋 Menyu")
+    assert any("Kategoriyani tanlang" in t for t in s.texts(CUSTOMER))
+    await click(bot, dp, CUSTOMER, "sh:cat:1")
+    await click(bot, dp, CUSTOMER, "sh:p:1:1:1")      # Katta
+    await click(bot, dp, CUSTOMER, "sh:p:1:1:2", photo=True)
+    await click(bot, dp, CUSTOMER, "sh:add:1:1:2", photo=True)
+    await click(bot, dp, CUSTOMER, "sh:add:9:0:1")
+    cart = await db.cart_get(CUSTOMER)
+    assert [(i["product_id"], i["variant"], i["qty"]) for i in cart] == [(1, 1, 2), (9, 0, 1)]
+    await click(bot, dp, CUSTOMER, "sh:ci:9:0:1")
+    await click(bot, dp, CUSTOMER, "sh:ci:9:0:-2")
+    assert len(await db.cart_get(CUSTOMER)) == 1
+    s.calls.clear()
+    await send(bot, dp, CUSTOMER, "🛒 Savat")
+    assert any("40 000 so'm" in t for t in s.texts(CUSTOMER))
+
+    await click(bot, dp, CUSTOMER, "sh:co")
+    await send(bot, dp, CUSTOMER, "Ali Valiyev")
+    await send(bot, dp, CUSTOMER, "12345")                       # noto'g'ri
+    await send(bot, dp, CUSTOMER, None, contact=Contact(phone_number="998998081212", first_name="Ali"))
+    await send(bot, dp, CUSTOMER, None, location=Location(latitude=41.31, longitude=69.24))
+    await send(bot, dp, CUSTOMER, "Domofon 25")
+    await click(bot, dp, CUSTOMER, "sh:pay:card")                # tez kunda
+    await click(bot, dp, CUSTOMER, "sh:pay:cash")
+    s.calls.clear()
+    await click(bot, dp, CUSTOMER, "sh:ok")
+    orders = await db.get_user_orders(CUSTOMER)
+    assert len(orders) == 1
+    o = orders[0]
+    assert o["phone"] == "+998998081212" and o["total"] == 40000 and "maps.google.com" in o["address"]
+    assert o["comment"] == "Domofon 25" and o["payment_method"] == "cash"
+    assert await db.cart_get(CUSTOMER) == []
+    assert any("YANGI BUYURTMA" in t for t in s.texts(STAFF))
+    assert any(o["code"] in t for t in s.texts(CUSTOMER))
+    # kuzatish va qayta buyurtma
+    await click(bot, dp, CUSTOMER, f"sh:o:{o['code']}")
+    await click(bot, dp, STAFF, f"sh:o:{o['code']}")             # boshqa odam ko'ra olmaydi
+    await click(bot, dp, CUSTOMER, f"sh:oc:{o['code']}")
+    assert (await db.get_order(o["id"]))["status"] == "cancelled"
+    await click(bot, dp, CUSTOMER, f"sh:rp:{o['code']}")
+    assert (await db.cart_get(CUSTOMER))[0]["qty"] == 2
+
+
+async def test_checkout_cancel_keeps_cart(env):
+    bot, dp, s = env
+    await click(bot, dp, CUSTOMER, "sh:add:9:0:1")
+    await click(bot, dp, CUSTOMER, "sh:co")
+    await send(bot, dp, CUSTOMER, "❌ Buyurtmani bekor qilish")
+    assert len(await db.cart_get(CUSTOMER)) == 1
+    s.calls.clear()
+    await send(bot, dp, CUSTOMER, "📦 Buyurtmalarim")   # holat tozalangan, tugmalar ishlaydi
+    assert any("buyurtmalar yo'q" in t for t in s.texts(CUSTOMER))

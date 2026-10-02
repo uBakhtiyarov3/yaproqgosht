@@ -2,9 +2,7 @@
 import asyncio
 import json
 import logging
-import re
 import time
-from datetime import datetime, timedelta
 
 from aiogram import Bot
 from aiogram.utils.web_app import safe_parse_webapp_init_data
@@ -13,13 +11,12 @@ from aiohttp import web
 from . import db
 from .config import config
 from .notify import notify_new_order, refresh_staff_messages
-from .utils import ACTIVE_STATUSES, STATUS_LABELS, STATUSES, TZ, now
+from .orders import OrderError, normalize_phone, place_order, public_settings  # noqa: F401
+from .utils import ACTIVE_STATUSES, STATUS_LABELS, STATUSES
 
 log = logging.getLogger(__name__)
 
 INIT_DATA_TTL = 24 * 3600
-ORDER_COOLDOWN_SEC = 20
-PHONE_RE = re.compile(r"^\+998\d{9}$")
 
 
 def api_error(message: str, status: int = 400) -> web.Response:
@@ -58,14 +55,6 @@ async def auth_middleware(request: web.Request, handler):
 
 # ---------------- helpers ----------------
 
-def normalize_phone(raw: str) -> str | None:
-    digits = re.sub(r"\D", "", raw or "")
-    if len(digits) == 9:
-        digits = "998" + digits
-    phone = "+" + digits
-    return phone if PHONE_RE.match(phone) else None
-
-
 async def order_json(order: dict) -> dict:
     items = await db.get_order_items(order["id"])
     log_rows = await db.get_order_log(order["id"])
@@ -89,16 +78,6 @@ async def order_json(order: dict) -> dict:
             for i in items
         ],
         "timeline": {r["status"]: r["at"] for r in log_rows},
-    }
-
-
-def public_settings(s: dict) -> dict:
-    return {
-        "is_open": s.get("is_open") == "1",
-        "delivery_fee": int(s.get("delivery_fee") or 0),
-        "min_order": int(s.get("min_order") or 0),
-        "phone": s.get("phone") or "",
-        "work_hours": s.get("work_hours") or "",
     }
 
 
@@ -134,71 +113,10 @@ async def api_create_order(request: web.Request) -> web.Response:
         return api_error("Noto'g'ri so'rov")
     if not isinstance(body, dict):
         return api_error("Noto'g'ri so'rov")
-
-    settings = public_settings(await db.get_settings())
-    if not settings["is_open"]:
-        return api_error("Hozir buyurtma qabul qilinmayapti. Ish vaqti: " + settings["work_hours"])
-
-    name = str(body.get("name") or "").strip()
-    address = str(body.get("address") or "").strip()
-    comment = str(body.get("comment") or "").strip()[:300]
-    phone = normalize_phone(str(body.get("phone") or ""))
-    payment = body.get("payment_method")
-
-    if not 2 <= len(name) <= 64:
-        return api_error("Qabul qiluvchi ismini kiriting")
-    if not phone:
-        return api_error("Telefon raqam noto'g'ri. Format: +998 90 123 45 67")
-    if not 5 <= len(address) <= 300:
-        return api_error("Manzilni to'liqroq kiriting")
-    if payment == "card":
-        return api_error("Karta orqali to'lov tez kunda ishga tushadi. Hozircha naqd to'lovni tanlang.")
-    if payment != "cash":
-        return api_error("To'lov usulini tanlang")
-
-    raw_items = body.get("items")
-    if not isinstance(raw_items, list) or not raw_items:
-        return api_error("Savat bo'sh")
-    if len(raw_items) > 30:
-        return api_error("Savatda juda ko'p mahsulot")
-
-    items = []
-    for raw in raw_items:
-        try:
-            pid, vidx, qty = int(raw["product_id"]), int(raw.get("variant", 0)), int(raw["qty"])
-        except (KeyError, TypeError, ValueError):
-            return api_error("Savatda xato bor")
-        if not 1 <= qty <= 50:
-            return api_error("Mahsulot soni 1 dan 50 gacha bo'lishi kerak")
-        product = await db.get_product(pid)
-        cat = await db.get_category(product["category_id"]) if product else None
-        if not product or not product["is_available"] or not cat or not cat["is_active"]:
-            return api_error("Savatdagi ba'zi mahsulotlar endi mavjud emas. Savatni yangilang.", 409)
-        if not 0 <= vidx < len(product["variants"]):
-            return api_error("Mahsulot o'lchami topilmadi. Savatni yangilang.", 409)
-        variant = product["variants"][vidx]
-        items.append({
-            "product_id": pid, "name": product["name"], "variant": variant["name"],
-            "price": int(variant["price"]), "qty": qty,
-        })
-
-    subtotal = sum(i["price"] * i["qty"] for i in items)
-    if subtotal < settings["min_order"]:
-        return api_error(f"Minimal buyurtma summasi: {settings['min_order']:,} so'm".replace(",", " "))
-
-    last = await db.scalar("SELECT MAX(created_at) FROM orders WHERE user_id = ?", user["id"])
-    if last:
-        last_dt = datetime.strptime(last, "%Y-%m-%d %H:%M:%S").replace(tzinfo=TZ)
-        if now() - last_dt < timedelta(seconds=ORDER_COOLDOWN_SEC):
-            return api_error("Iltimos, biroz kuting va qayta urinib ko'ring", 429)
-
-    order_id = await db.create_order(
-        user["id"],
-        {"name": name, "phone": phone, "address": address, "comment": comment, "payment_method": payment},
-        items,
-        settings["delivery_fee"],
-    )
-    await db.update_user_profile(user["id"], name, phone, address)
+    try:
+        order_id = await place_order(user["id"], body, body.get("items"))
+    except OrderError as e:
+        return api_error(e.message, e.status)
 
     bot: Bot | None = request.app.get("bot")
     if bot:

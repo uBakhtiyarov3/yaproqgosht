@@ -2,12 +2,12 @@ import asyncio
 import logging
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
 
 from . import db
 from .config import config
-from .keyboards import order_staff_kb, webapp_inline_kb
+from .keyboards import order_staff_kb, order_track_kb
 from .utils import STATUS_LABELS, format_order
 
 log = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ async def staff_recipients() -> list[int]:
     return sorted(ids)
 
 
-async def notify_new_order(bot: Bot, order_id: int) -> None:
+async def notify_new_order(bot: Bot, order_id: int, notify_customer: bool = True) -> None:
     order = await db.get_order(order_id)
     items = await db.get_order_items(order_id)
     text = "🔔 <b>YANGI BUYURTMA!</b>\n\n" + format_order(order, items)
@@ -39,6 +39,8 @@ async def notify_new_order(bot: Bot, order_id: int) -> None:
         except (TelegramForbiddenError, TelegramBadRequest) as e:
             log.warning("Xodimga yuborib bo'lmadi %s: %s", chat_id, e)
 
+    if not notify_customer:  # bot ichidagi savatdan berilganda mijozga tasdiq allaqachon ko'rsatilgan
+        return
     # Mijozga tasdiq
     try:
         await bot.send_message(
@@ -46,8 +48,8 @@ async def notify_new_order(bot: Bot, order_id: int) -> None:
             f"🧾 Buyurtmangiz <code>{order['code']}</code> qabul qilish uchun yuborildi!\n"
             f"Holati: {STATUS_LABELS['new']}\n\n"
             "Holat o'zgarganda sizga shu yerda xabar beramiz. "
-            "Jarayonni mini ilovadagi «Buyurtmalarim» bo'limida ham kuzatishingiz mumkin.",
-            reply_markup=webapp_inline_kb("📦 Buyurtmani kuzatish", "orders"),
+            "Jarayonni «📦 Buyurtmalarim» bo'limida ham kuzatishingiz mumkin.",
+            reply_markup=order_track_kb(order["code"]),
         )
     except (TelegramForbiddenError, TelegramBadRequest) as e:
         log.warning("Mijozga yuborib bo'lmadi %s: %s", order["user_id"], e)
@@ -82,29 +84,51 @@ async def notify_status_change(bot: Bot, order_id: int) -> None:
         await bot.send_message(
             order["user_id"],
             template.format(code=order['code'], reason=reason),
-            reply_markup=webapp_inline_kb("📦 Buyurtmani ko'rish", "orders")
-            if order["status"] not in ("delivered", "cancelled") else None,
+            reply_markup=order_track_kb(order["code"]),
         )
     except (TelegramForbiddenError, TelegramBadRequest) as e:
         log.warning("Mijozga holat yuborilmadi %s: %s", order["user_id"], e)
 
 
-async def broadcast(bot: Bot, from_chat_id: int, message_id: int, progress_cb=None) -> tuple[int, int]:
-    """Xabarni barcha foydalanuvchilarga nusxalaydi. (yuborildi, xato) qaytaradi."""
+async def send_post(bot: Bot, chat_id: int, from_chat_id: int, message_ids: list[int],
+                    mode: str = "copy", reply_markup: InlineKeyboardMarkup | None = None) -> None:
+    """Bitta qabul qiluvchiga post yuboradi: nusxa (copy) yoki forward, albomlar bilan."""
+    if mode == "forward":
+        if len(message_ids) > 1:
+            await bot.forward_messages(chat_id, from_chat_id, message_ids)
+        else:
+            await bot.forward_message(chat_id, from_chat_id, message_ids[0])
+    elif len(message_ids) > 1:
+        # albom: Telegram albomga inline tugma biriktirishga ruxsat bermaydi
+        await bot.copy_messages(chat_id, from_chat_id, message_ids)
+    else:
+        await bot.copy_message(chat_id, from_chat_id, message_ids[0], reply_markup=reply_markup)
+
+
+async def broadcast(bot: Bot, from_chat_id: int, message_ids: list[int], mode: str = "copy",
+                    reply_markup: InlineKeyboardMarkup | None = None, progress_cb=None) -> tuple[int, int]:
+    """Postni barcha foydalanuvchilarga yuboradi. (yuborildi, xato) qaytaradi."""
     ok = fail = 0
     user_ids = await db.all_user_ids()
     for i, uid in enumerate(user_ids, 1):
-        try:
-            await bot.copy_message(uid, from_chat_id, message_id)
-            ok += 1
-        except TelegramForbiddenError:
-            await db.set_blocked(uid, True)
-            fail += 1
-        except TelegramBadRequest:
-            fail += 1
-        except Exception as e:  # flood limit va boshqalar
-            log.warning("Broadcast error %s: %s", uid, e)
-            fail += 1
+        for attempt in range(2):
+            try:
+                await send_post(bot, uid, from_chat_id, message_ids, mode, reply_markup)
+                ok += 1
+            except TelegramRetryAfter as e:  # flood limit — kutib qayta urinamiz
+                if attempt == 0:
+                    await asyncio.sleep(e.retry_after + 1)
+                    continue
+                fail += 1
+            except TelegramForbiddenError:
+                await db.set_blocked(uid, True)
+                fail += 1
+            except TelegramBadRequest:
+                fail += 1
+            except Exception as e:
+                log.warning("Broadcast error %s: %s", uid, e)
+                fail += 1
+            break
         await asyncio.sleep(0.05)  # Telegram limiti: ~30 xabar/soniya
         if progress_cb and i % 50 == 0:
             await progress_cb(i, len(user_ids))

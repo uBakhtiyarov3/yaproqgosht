@@ -20,6 +20,7 @@ async def setup_bot_ui(bot: Bot) -> None:
     await bot.set_my_commands([
         BotCommand(command="start", description="Botni ishga tushirish"),
         BotCommand(command="menu", description="Menyu / buyurtma berish"),
+        BotCommand(command="cart", description="Savat"),
         BotCommand(command="orders", description="Buyurtmalarim"),
         BotCommand(command="help", description="Yordam"),
     ])

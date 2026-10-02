@@ -1,10 +1,10 @@
 from aiogram import Router
 
-from . import admin, common, staff
+from . import admin, common, shop, staff
 
 
 def setup_routers() -> Router:
     root = Router()
-    # tartib muhim: menejer FSM holatlari umumiy tugmalardan oldin tekshiriladi
-    root.include_routers(admin.router, staff.router, common.router, common.fallback_router)
+    # tartib muhim: buyurtma va menejer FSM holatlari umumiy tugmalardan oldin tekshiriladi
+    root.include_routers(shop.router, admin.router, staff.router, common.router, common.fallback_router)
     return root

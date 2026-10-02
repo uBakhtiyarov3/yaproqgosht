@@ -4,9 +4,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from .. import db
-from ..keyboards import B, main_kb, webapp_inline_kb, webapp_ready
+from ..keyboards import B, main_kb, start_inline_kb, webapp_ready
 from ..roles import get_role
-from ..utils import STATUS_LABELS, h, money
+from ..utils import h
 
 router = Router(name="common")
 
@@ -33,16 +33,17 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     settings = await db.get_settings()
     if settings.get("is_open") != "1":
         greeting += "⏸ Hozir buyurtma qabul qilinmayapti. Ish vaqti: " + h(settings.get("work_hours")) + "\n\n"
-    greeting += "🍔 Buyurtma berish uchun pastdagi <b>«Menyuni ochish»</b> tugmasini bosing."
+    greeting += "Buyurtmani qanday berasiz? 👇"
 
     await message.answer(greeting, reply_markup=main_kb(role))
-    kb = webapp_inline_kb("🍔 Menyuni ochish")
-    if kb:
-        await message.answer("👇 Mini ilova orqali menyu, savat va buyurtmalaringiz:", reply_markup=kb)
-    elif role == "manager":
+    ways = "📋 <b>Botning o'zida</b> — tugmalar orqali, shu chatning ichida."
+    if webapp_ready():
+        ways = "🍔 <b>Mini ilova</b> — rasmli menyu va qulay savat.\n" + ways
+    await message.answer(ways, reply_markup=start_inline_kb())
+    if not webapp_ready() and role == "manager":
         await message.answer(
-            "⚠️ <b>WEBAPP_URL</b> sozlanmagan yoki https emas — mini app tugmasi chiqmaydi.\n"
-            ".env faylida WEBAPP_URL=https://... ni ko'rsating."
+            "ℹ️ <b>WEBAPP_URL</b> sozlanmagan yoki https emas — hozircha faqat bot ichida buyurtma ishlaydi.\n"
+            ".env faylida WEBAPP_URL=https://... ni ko'rsatsangiz, mini ilova tugmasi ham chiqadi."
         )
 
 
@@ -52,7 +53,8 @@ async def cmd_help(message: Message) -> None:
     text = (
         "ℹ️ <b>Yordam</b>\n\n"
         "/start — botni qayta ishga tushirish\n"
-        "/menu — menyuni ochish\n"
+        "/menu — menyu (bot ichida buyurtma)\n"
+        "/cart — savat\n"
         "/orders — buyurtmalarim\n"
     )
     if role in ("staff", "manager"):
@@ -60,37 +62,6 @@ async def cmd_help(message: Message) -> None:
     if role == "manager":
         text += "\n<b>Menejer:</b>\n/admin — menejer paneli\n"
     await message.answer(text)
-
-
-@router.message(StateFilter(None), F.text == B.MENU)
-@router.message(Command("menu"))
-async def open_menu(message: Message) -> None:
-    kb = webapp_inline_kb("🍔 Menyuni ochish")
-    if kb:
-        await message.answer("Menyuni ochish uchun bosing 👇", reply_markup=kb)
-    else:
-        await message.answer("⏳ Mini ilova hali sozlanmagan. Tez orada ishga tushadi!")
-
-
-@router.message(StateFilter(None), F.text == B.MY_ORDERS)
-@router.message(Command("orders"))
-async def my_orders(message: Message) -> None:
-    orders = await db.get_user_orders(message.from_user.id, limit=5)
-    if not orders:
-        await message.answer(
-            "Sizda hali buyurtmalar yo'q. Keling, birinchisini beramiz! 🍔",
-            reply_markup=webapp_inline_kb("🍔 Menyuni ochish"),
-        )
-        return
-    lines = ["📦 <b>Oxirgi buyurtmalaringiz:</b>\n"]
-    for o in orders:
-        lines.append(
-            f"<code>{o['code']}</code> — {money(o['total'])}\n"
-            f"   {STATUS_LABELS.get(o['status'])} · {o['created_at'][:16]}"
-        )
-    await message.answer(
-        "\n".join(lines), reply_markup=webapp_inline_kb("📦 Batafsil kuzatish", "orders")
-    )
 
 
 @router.message(StateFilter(None), F.text == B.CONTACT)

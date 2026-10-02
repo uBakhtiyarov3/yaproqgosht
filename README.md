@@ -5,7 +5,8 @@
 ## Imkoniyatlar
 
 ### 🙋 Mijoz
-- `/start` bosilganda **akkaunt avtomatik ochiladi**, keyin mini ilovani ochish taklif qilinadi (pastdagi menyu tugmasi ham mini ilovani ochadi).
+- `/start` bosilganda **akkaunt avtomatik ochiladi**, keyin ikki yo'l taklif qilinadi: Mini App yoki botning o'zida buyurtma.
+- **Bot ichida buyurtma (Mini Appsiz)**: «📋 Menyu» → kategoriya → mahsulot kartasi (rasm, o'lcham, ➖/➕ soni) → «🛒 Savat» (sonini o'zgartirish, tozalash) → rasmiylashtirish: ism, telefon («📱 Raqamimni yuborish» tugmasi yoki yozib), manzil (matn yoki «📍 Joylashuv»), izoh, to'lov (Naqd / Karta — tez kunda), tasdiqlash. Oldingi ism, telefon va manzil tugma bo'lib chiqadi. «📦 Buyurtmalarim» da holat, bekor qilish va «🔁 Qayta buyurtma».
 - **Mini App**: kategoriyalar, rasmli mahsulotlar va narxlar, o'lcham tanlash (O'rta/Katta, 60g/80g), savat.
 - **Rasmiylashtirish**: qabul qiluvchining ismi, telefon (`+998` prefiksi doim turadi, raqam o'zi `+998 90 123 45 67` ko'rinishiga keladi), manzil, ixtiyoriy izoh va joylashuv. To'lov: **Naqd** (faol) va **Karta** (yopiq, "Tez kunda" belgisi bilan).
 - Har bir buyurtmaga **unikal uzun ID** beriladi: `YG-261002-7K3Q-9XM2`.
@@ -24,7 +25,7 @@
 - 🍔 **Menyuni boshqarish**:
   - kategoriyalar: qo'shish, nomi/emojini o'zgartirish, yashirish/ko'rsatish, tartibini o'zgartirish (⬆️/⬇️), o'chirish;
   - mahsulotlar: qo'shish (nomi, tavsifi, narx(lar)i, rasmi), har bir maydonni tahrirlash, boshqa kategoriyaga ko'chirish, sotuvdan olish, o'chirish.
-- 📢 **Rassilka**: istalgan xabarni (matn, rasm, video) barcha foydalanuvchilarga yuborish (oldin ko'rib tasdiqlanadi).
+- 📢 **Rassilka**: matn, rasm/video, **albom** yoki kanaldan **forward qilingan tayyor rasmli post** — barcha foydalanuvchilarga. «Nusxa» (bot nomidan) yoki «Forward» (manba ko'rinadi) rejimi, havola tugmalar (`Matn - https://...`) va «📋 Buyurtma berish» tugmasini qo'shish, yuborishdan oldin aynan qanday ko'rinishini ko'rsatadi.
 - 👥 **Xodimlar**: xodim yoki menejer qo'shish (kontaktdan tanlab, ID yoki @username orqali) va olib tashlash.
 - 🙋 **Mijozlar**: soni, eng faol mijozlar, ID/telefon/username bo'yicha qidirish.
 - ⚙️ **Sozlamalar**: buyurtma qabul qilishni to'xtatish/ochish, yetkazish narxi, minimal summa, telefon, ish vaqti.
@@ -76,7 +77,7 @@ Keyin `docker compose up -d --build` (baza va rasmlar `./data` papkasida saqlana
 ## Test qilish
 
 1. `.env` dagi `ADMIN_IDS` ga o'z ID ingizni yozing → botga `/start` bosing → **👑 Menejer paneli** va **👷 Xodim kabineti** tugmalari chiqadi.
-2. **🍔 Menyu** → mahsulot qo'shing → savat → buyurtma bering.
+2. **📋 Menyu** (bot ichida) yoki **🍔 Mini ilova** → mahsulot qo'shing → savat → buyurtma bering.
 3. Shu zahoti botga "🔔 YANGI BUYURTMA" xabari keladi → tugmalar orqali holatni o'zgartiring → mini ilovadagi buyurtma sahifasi va mijozga keladigan xabarlar o'zgarishini kuzating.
 4. Ikkinchi akkauntni **👥 Xodimlar → ➕ Xodim qo'shish** orqali xodim qilib, buyurtmalar unga ham kelishini tekshiring.
 
@@ -96,7 +97,9 @@ app/config.py         — .env sozlamalari
 app/db.py             — SQLite sxema, menyu seed, so'rovlar, statistika
 app/webapp.py         — Mini App API (Telegram initData tekshiruvi bilan)
 app/notify.py         — xodim/mijozga bildirishnomalar, rassilka
-app/handlers/common.py — /start, mijoz tugmalari, fikr-mulohaza
+app/orders.py         — buyurtma tekshiruv qoidalari (Mini App va bot uchun umumiy)
+app/handlers/shop.py   — bot ichida menyu, savat, rasmiylashtirish, buyurtmalarim
+app/handlers/common.py — /start, aloqa, fikr-mulohaza
 app/handlers/staff.py  — xodim kabineti, holat tugmalari
 app/handlers/admin.py  — menejer paneli
 webapp/               — Mini App (HTML/CSS/JS) va mahsulot rasmlari

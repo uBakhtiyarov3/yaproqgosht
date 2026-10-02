@@ -9,7 +9,8 @@ import pytest
 from app import db
 from app.config import config
 from app.handlers.admin import parse_prices
-from app.webapp import create_app, normalize_phone
+from app.orders import normalize_phone
+from app.webapp import create_app
 
 
 def make_init_data(user_id: int, token: str = None, auth_date: int = None) -> str:

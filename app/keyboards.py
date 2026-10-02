@@ -22,7 +22,9 @@ def webapp_url(section: str = "") -> str:
 
 class B:
     """Reply tugmalar matnlari (handlerlarda filtr sifatida ishlatiladi)."""
-    MENU = "🍔 Menyu / Buyurtma berish"
+    MENU = "🍔 Mini ilovada buyurtma"
+    BOT_MENU = "📋 Menyu"
+    CART = "🛒 Savat"
     MY_ORDERS = "📦 Buyurtmalarim"
     CONTACT = "📞 Aloqa"
     ABOUT = "ℹ️ Biz haqimizda"
@@ -50,17 +52,35 @@ class B:
 
 
 def main_kb(role: str) -> ReplyKeyboardMarkup:
-    menu_btn = (
-        KeyboardButton(text=B.MENU, web_app=WebAppInfo(url=webapp_url()))
-        if webapp_ready() else KeyboardButton(text=B.MENU)
-    )
-    rows = [[menu_btn], [KeyboardButton(text=B.MY_ORDERS), KeyboardButton(text=B.CONTACT)],
-            [KeyboardButton(text=B.ABOUT)]]
+    rows = []
+    if webapp_ready():
+        rows.append([KeyboardButton(text=B.MENU, web_app=WebAppInfo(url=webapp_url()))])
+    rows += [
+        [KeyboardButton(text=B.BOT_MENU), KeyboardButton(text=B.CART)],
+        [KeyboardButton(text=B.MY_ORDERS), KeyboardButton(text=B.CONTACT)],
+        [KeyboardButton(text=B.ABOUT)],
+    ]
     if role in ("staff", "manager"):
         rows.append([KeyboardButton(text=B.STAFF)])
     if role == "manager":
         rows[-1].append(KeyboardButton(text=B.MANAGER))
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+def start_inline_kb() -> InlineKeyboardMarkup:
+    """/start dagi ikki yo'l: Mini App yoki bot ichida buyurtma."""
+    rows = []
+    if webapp_ready():
+        rows.append([InlineKeyboardButton(text="🍔 Mini ilovada buyurtma berish", web_app=WebAppInfo(url=webapp_url()))])
+    rows.append([InlineKeyboardButton(text="📋 Botning o'zida buyurtma berish", callback_data="sh:cats")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def order_track_kb(code: str) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text="📦 Buyurtmani kuzatish", callback_data=f"sh:o:{code}")]]
+    if webapp_ready():
+        rows.append([InlineKeyboardButton(text="🍔 Mini ilovada ochish", web_app=WebAppInfo(url=webapp_url("orders")))])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def staff_kb() -> ReplyKeyboardMarkup:
