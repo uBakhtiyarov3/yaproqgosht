@@ -8,7 +8,7 @@ from aiogram import Bot
 from aiogram.utils.web_app import safe_parse_webapp_init_data
 from aiohttp import web
 
-from . import db, hours
+from . import admin_api, db, hours
 from .catalog import norm_lang, variant_name
 from .config import config
 from .i18n import status_text, t, web_texts
@@ -27,9 +27,36 @@ def api_error(message: str, status: int = 400) -> web.Response:
 
 # ---------------- auth ----------------
 
+CORS_HEADERS = "Content-Type, X-Telegram-Init-Data, X-Admin-Token, X-Dev-User"
+
+
+@web.middleware
+async def cors_middleware(request: web.Request, handler):
+    """Mini App / admin panel boshqa domenda (masalan shared hosting) joylashganda API ga ruxsat."""
+    origin = request.headers.get("Origin", "").rstrip("/")
+    allowed = origin and (origin in config.cors_origins or "*" in config.cors_origins)
+    if request.method == "OPTIONS" and request.path.startswith("/api/"):
+        resp = web.Response(status=204)
+    else:
+        try:
+            resp = await handler(request)
+        except web.HTTPException as e:
+            resp = e
+    if allowed:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = CORS_HEADERS
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+        resp.headers["Access-Control-Max-Age"] = "86400"
+        resp.headers["Vary"] = "Origin"
+    if isinstance(resp, web.HTTPException) and resp.status >= 400:
+        raise resp
+    return resp
+
+
 @web.middleware
 async def auth_middleware(request: web.Request, handler):
-    if not request.path.startswith("/api/"):
+    if not request.path.startswith("/api/") or request.path.startswith("/api/admin/"):
         return await handler(request)
     init_data = request.headers.get("X-Telegram-Init-Data", "")
     tg_user = None
@@ -139,6 +166,8 @@ async def api_me(request: web.Request) -> web.Response:
 
 
 async def _json_body(request: web.Request) -> dict | None:
+    if (request.content_length or 0) > 64 * 1024:  # mijoz so'rovlari kichik bo'ladi
+        return None
     try:
         body = await request.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -255,9 +284,34 @@ async def health(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "statuses": STATUSES, "active": list(ACTIVE_STATUSES)})
 
 
+def admin_file(name: str):
+    async def handler(request: web.Request) -> web.Response:
+        path = config.webapp_dir / "admin" / name
+        if name == "index.html":
+            html = path.read_text(encoding="utf-8").replace("{{v}}", request.app["version"])
+            return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-cache"})
+        return web.FileResponse(path, headers={"Cache-Control": "no-cache"})
+    return handler
+
+
+async def admin_redirect(request: web.Request) -> web.Response:
+    raise web.HTTPFound("/admin/")
+
+
+async def _bot_username(app: web.Application) -> None:
+    bot: Bot | None = app.get("bot")
+    if bot and not app.get("bot_username"):
+        try:
+            app["bot_username"] = (await bot.get_me()).username or ""
+        except Exception:  # noqa: BLE001
+            app["bot_username"] = ""
+
+
 def create_app(bot: Bot | None) -> web.Application:
-    app = web.Application(middlewares=[auth_middleware], client_max_size=1024 * 64)
+    # 12 MB: admin panelda rasm yuklash va rasmli rassilka uchun
+    app = web.Application(middlewares=[cors_middleware, auth_middleware], client_max_size=12 * 1024 * 1024)
     app["bot"] = bot
+    app.on_startup.append(_bot_username)
     app["version"] = str(int(time.time()))
     config.uploads_dir.mkdir(parents=True, exist_ok=True)
     app.router.add_get("/", index)
@@ -276,4 +330,9 @@ def create_app(bot: Bot | None) -> web.Application:
     app.router.add_get("/api/orders/{code}", api_order)
     app.router.add_post("/api/orders/{code}/cancel", api_cancel_order)
     app.router.add_post("/api/orders/{code}/review", api_review)
+    app.router.add_get("/admin", admin_redirect)
+    app.router.add_get("/admin/", admin_file("index.html"))
+    app.router.add_get("/admin/admin.js", admin_file("admin.js"))
+    app.router.add_get("/admin/admin.css", admin_file("admin.css"))
+    admin_api.setup(app)
     return app

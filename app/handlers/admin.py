@@ -19,6 +19,7 @@ from aiogram.types import (
     KeyboardButtonRequestUsers,
     Message,
     ReplyKeyboardMarkup,
+    WebAppInfo,
 )
 
 from .. import db, hours
@@ -258,6 +259,30 @@ async def export_period(call: CallbackQuery) -> None:
         caption=f"📥 {PERIODS[period]}: {len(rows)} ta buyurtma",
     )
     await call.answer()
+
+
+# ====================== web panel ======================
+
+@router.message(StateFilter(None), F.text == B.WEB_PANEL)
+async def web_panel(message: Message) -> None:
+    from ..admin_api import LOGIN_CODE_MINUTES, make_login_link
+
+    link = await make_login_link(message.from_user.id)
+    rows = []
+    if link.startswith("https://"):
+        rows.append([InlineKeyboardButton(text="🌐 Brauzerda ochish", url=link)])
+        rows.append([InlineKeyboardButton(text="📱 Telegram ichida ochish",
+                                          web_app=WebAppInfo(url=link.split("#", 1)[0]))])
+    await message.answer(
+        "🖥 <b>Admin web panel</b>\n\n"
+        "Panelda botning hamma narsasini boshqarasiz: menyu, kategoriyalar, rasmlar, narxlar, chegirmalar, "
+        "barcha xabar matnlari, ish vaqti, sozlamalar, promo-kodlar, buyurtmalar, rassilka va hisobotlar.\n"
+        "Saqlash tugmasi bosilishi bilan bot darhol yangilanadi.\n\n"
+        f"🔐 Havola bir martalik va {LOGIN_CODE_MINUTES} daqiqa amal qiladi. Uni hech kimga bermang!"
+        + ("" if rows else f"\n\n<code>{h(link)}</code>"),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+        disable_web_page_preview=True,
+    )
 
 
 # ====================== zaxira nusxa ======================

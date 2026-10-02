@@ -122,6 +122,15 @@ CREATE TABLE IF NOT EXISTS reviews (
     created_at TEXT NOT NULL
 );
 
+-- admin web panel sessiyalari (token xeshi saqlanadi)
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,                         -- login (bir martalik kod) | session
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- admin paneldan tahrirlangan bot/Mini App matnlari
 CREATE TABLE IF NOT EXISTS texts (
     key TEXT NOT NULL,
@@ -369,6 +378,43 @@ async def set_text(key: str, lang: str, value: str | None) -> None:
     await reload_texts()
 
 
+# ---------------- admin sessiyalari ----------------
+
+def _hash(token: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+async def create_admin_token(user_id: int, kind: str, ttl_minutes: int) -> str:
+    from datetime import timedelta
+
+    from .utils import now
+
+    token = secrets.token_urlsafe(32)
+    expires = (now() + timedelta(minutes=ttl_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+    await execute("DELETE FROM admin_sessions WHERE expires_at < ?", now_str())
+    await execute(
+        "INSERT INTO admin_sessions(token_hash, user_id, kind, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+        _hash(token), user_id, kind, expires, now_str(),
+    )
+    return token
+
+
+async def check_admin_token(token: str, kind: str, consume: bool = False) -> int | None:
+    row = await fetchone(
+        "SELECT user_id FROM admin_sessions WHERE token_hash = ? AND kind = ? AND expires_at > ?",
+        _hash(token), kind, now_str(),
+    )
+    if row and consume:
+        await execute("DELETE FROM admin_sessions WHERE token_hash = ?", _hash(token))
+    return row["user_id"] if row else None
+
+
+async def delete_admin_token(token: str) -> None:
+    await execute("DELETE FROM admin_sessions WHERE token_hash = ?", _hash(token))
+
+
 # ---------------- users ----------------
 
 async def upsert_user(user_id: int, first_name: str, last_name: str | None, username: str | None) -> tuple[dict, bool]:
@@ -480,7 +526,7 @@ async def add_product(category_id: int, name: str, description: str, image: str,
 
 PRODUCT_FIELDS = {
     "name", "description", "image", "variants", "is_available", "category_id", "is_deleted",
-    "name_ru", "description_ru", "badges", "discount_percent", "discount_until",
+    "name_ru", "description_ru", "badges", "discount_percent", "discount_until", "sort",
 }
 
 

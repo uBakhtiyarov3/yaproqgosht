@@ -45,6 +45,7 @@ class B:
     USERS = "🙋 Mijozlar"
     BACKUP = "💾 Zaxira nusxa"
     PROMOS = "🎁 Promo-kodlar"
+    WEB_PANEL = "🖥 Web panel"
     REVIEWS = "⭐ Baholar"
 
     CANCEL = "🚫 Bekor qilish"
@@ -111,6 +112,7 @@ def staff_kb() -> ReplyKeyboardMarkup:
 def manager_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text=B.WEB_PANEL)],
             [KeyboardButton(text=B.STATS), KeyboardButton(text=B.ORDERS)],
             [KeyboardButton(text=B.MENU_EDIT), KeyboardButton(text=B.BROADCAST)],
             [KeyboardButton(text=B.STAFF_LIST), KeyboardButton(text=B.USERS)],

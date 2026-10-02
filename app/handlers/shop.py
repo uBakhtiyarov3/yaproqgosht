@@ -24,6 +24,7 @@ from ..catalog import (
     variant_name, variant_price,
 )
 from ..config import config
+from ..filters import Btn
 from ..i18n import both, money_l, stars, status_text, t
 from ..keyboards import ikb, main_kb, webapp_ready, webapp_url
 from ..notify import notify_new_order, notify_review, refresh_staff_messages
@@ -210,7 +211,7 @@ async def product_view(user_id: int, pid: int, v: int, q: int):
     return "\n".join(lines), _kb(rows), p["image"]
 
 
-@router.message(StateFilter(None), F.text.in_(both("b_menu_mini")))
+@router.message(StateFilter(None), Btn("b_menu_mini"))
 async def open_mini_app(message: Message) -> None:
     lang = await lang_of(message.from_user.id)
     if not webapp_ready():
@@ -225,7 +226,7 @@ async def open_mini_app(message: Message) -> None:
     )
 
 
-@router.message(StateFilter(None), F.text.in_(both("b_menu")))
+@router.message(StateFilter(None), Btn("b_menu"))
 @router.message(Command("menu"))
 async def menu_cmd(message: Message, state: FSMContext) -> None:
     await state.clear()
@@ -327,7 +328,7 @@ async def cart_view(user_id: int, header: str = "") -> tuple[str, InlineKeyboard
     return "\n".join(lines), _kb(rows)
 
 
-@router.message(StateFilter(None), F.text.in_(both("b_cart")))
+@router.message(StateFilter(None), Btn("b_cart"))
 @router.message(Command("cart"))
 async def cart_cmd(message: Message, state: FSMContext) -> None:
     await state.clear()
@@ -438,7 +439,7 @@ async def checkout_type(call: CallbackQuery, state: FSMContext) -> None:
     await _ask_name(call.message, state, lang)
 
 
-@router.message(StateFilter(Checkout), F.text.in_(both("co_cancel")))
+@router.message(StateFilter(Checkout), Btn("co_cancel"))
 async def checkout_cancel(message: Message, state: FSMContext) -> None:
     await state.clear()
     await _back_to_main(message, t("co_cancelled", await lang_of(message.from_user.id)), message.from_user.id)
@@ -850,7 +851,7 @@ async def order_detail_view(order: dict, lang: str) -> tuple[str, InlineKeyboard
     return "\n".join(lines), _kb(rows)
 
 
-@router.message(StateFilter(None), F.text.in_(both("b_orders")))
+@router.message(StateFilter(None), Btn("b_orders"))
 @router.message(Command("orders"))
 async def orders_cmd(message: Message) -> None:
     text, kb = await orders_view(message.from_user.id)

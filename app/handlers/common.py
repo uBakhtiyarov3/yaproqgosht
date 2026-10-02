@@ -6,7 +6,8 @@ from aiogram.types import CallbackQuery, Message
 from .. import db, hours
 from ..catalog import norm_lang
 from ..config import config
-from ..i18n import both, t
+from ..filters import Btn
+from ..i18n import t
 from ..keyboards import lang_kb, main_kb, start_inline_kb, webapp_ready
 from ..orders import public_settings
 from ..roles import get_role, lang_of
@@ -60,7 +61,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 
 
 @router.message(Command("lang"))
-@router.message(StateFilter(None), F.text.in_(both("b_lang")))
+@router.message(StateFilter(None), Btn("b_lang"))
 async def change_lang(message: Message) -> None:
     await message.answer(t("choose_lang"), reply_markup=lang_kb())
 
@@ -96,7 +97,7 @@ async def cmd_help(message: Message) -> None:
     await message.answer(text)
 
 
-@router.message(StateFilter(None), F.text.in_(both("b_contact")))
+@router.message(StateFilter(None), Btn("b_contact"))
 async def contact(message: Message) -> None:
     lang = await lang_of(message.from_user.id)
     s = await db.get_settings()
@@ -109,12 +110,12 @@ async def contact(message: Message) -> None:
     ))
 
 
-@router.message(StateFilter(None), F.text.in_(both("b_about")))
+@router.message(StateFilter(None), Btn("b_about"))
 async def about(message: Message) -> None:
     await message.answer(t("about", await lang_of(message.from_user.id)))
 
 
-@router.message(F.text.in_(both("b_back")))
+@router.message(Btn("b_back"))
 async def back(message: Message, state: FSMContext) -> None:
     await state.clear()
     await send_main_menu(message, message.from_user.id)
