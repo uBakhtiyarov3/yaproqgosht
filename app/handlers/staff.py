@@ -4,9 +4,10 @@ from aiogram.types import CallbackQuery, Message
 
 from .. import db
 from ..keyboards import B, ikb, order_staff_kb, staff_kb
+from ..order_card import send_order_card
 from ..notify import notify_status_change, refresh_staff_messages
 from ..roles import IsStaff
-from ..utils import ACTIVE_STATUSES, format_order, money, next_status, now, status_label
+from ..utils import ACTIVE_STATUSES, money, next_status, now, status_label
 
 router = Router(name="staff")
 router.message.filter(IsStaff)
@@ -42,7 +43,7 @@ async def _send_order_list(message: Message, orders: list[dict], empty: str) -> 
         return
     for o in reversed(orders[:10]):
         items = await db.get_order_items(o["id"])
-        msg = await message.answer(format_order(o, items), reply_markup=order_staff_kb(o))
+        msg = await send_order_card(message.bot, message.chat.id, o, items, reply_markup=order_staff_kb(o))
         # shu xabar ham holat o'zgarganda yangilanib turadi
         await db.save_order_message(o["id"], msg.chat.id, msg.message_id)
     if len(orders) > 10:

@@ -498,11 +498,14 @@
     picker.classList.toggle("hidden", state.co.time !== "later");
     if (state.co.time !== "later") return;
     if (!state.slots.length) {
+      $("#slot-days").classList.remove("hidden");
       $("#slot-days").innerHTML = `<span class="muted">${esc(L("noSlots"))}</span>`;
       $("#slot-times").innerHTML = "";
       return;
     }
     if (state.co.day >= state.slots.length) state.co.day = 0;
+    // faqat bugungi vaqtlar — bitta kun bo'lsa kun tanlash ko'rsatilmaydi
+    $("#slot-days").classList.toggle("hidden", state.slots.length < 2);
     $("#slot-days").innerHTML = state.slots.map((d, i) =>
       `<button type="button" class="chip ${i === state.co.day ? "active" : ""}" data-day="${i}">${esc(L(d.day))}</button>`).join("");
     const day = state.slots[state.co.day];

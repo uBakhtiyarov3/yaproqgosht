@@ -128,8 +128,8 @@ T: dict[str, dict[str, str]] = {
     "today": {"uz": "📅 Bugun", "ru": "📅 Сегодня"},
     "tomorrow": {"uz": "📅 Ertaga", "ru": "📅 Завтра"},
     "pick_time": {"uz": "🕒 Vaqtni tanlang ({day}):", "ru": "🕒 Выберите время ({day}):"},
-    "no_slots": {"uz": "Afsuski, yaqin kunlarda bo'sh vaqt yo'q. Keyinroq urinib ko'ring.",
-                 "ru": "К сожалению, свободного времени в ближайшие дни нет. Попробуйте позже."},
+    "no_slots": {"uz": "Afsuski, bugun buyurtma uchun bo'sh vaqt qolmadi. Ertaga ish vaqtida buyurtma bering.",
+                 "ru": "К сожалению, на сегодня свободного времени не осталось. Закажите завтра в рабочее время."},
     "ask_comment": {"uz": "💬 <b>Izoh</b> (ixtiyoriy)\n\nManzil bo'yicha (podyezd, qavat, domofon) yoki "
                           "ovqat bo'yicha (piyozsiz, achchiqroq, sousni alohida...) istaklaringizni yozing.",
                     "ru": "💬 <b>Комментарий</b> (необязательно)\n\nПо адресу (подъезд, этаж, домофон) или "
@@ -318,7 +318,7 @@ W: dict[str, dict[str, str]] = {
     "later": {"uz": "⏰ Vaqtni tanlash", "ru": "⏰ Ко времени"},
     "today": {"uz": "Bugun", "ru": "Сегодня"},
     "tomorrow": {"uz": "Ertaga", "ru": "Завтра"},
-    "noSlots": {"uz": "Yaqin kunlarda bo'sh vaqt yo'q", "ru": "Нет свободного времени"},
+    "noSlots": {"uz": "Bugun bo'sh vaqt qolmadi", "ru": "На сегодня свободного времени нет"},
     "comment": {"uz": "Izoh (ixtiyoriy)", "ru": "Комментарий (необязательно)"},
     "commentPh": {"uz": "Manzil bo'yicha (podyezd, qavat, domofon) yoki ovqat bo'yicha (piyozsiz, achchiqroq...)",
                   "ru": "По адресу (подъезд, этаж, домофон) или по блюдам (без лука, поострее...)"},

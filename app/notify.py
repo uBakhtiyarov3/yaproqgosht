@@ -10,7 +10,8 @@ from .config import config
 from .i18n import t
 from .keyboards import order_staff_kb, order_track_kb, rating_kb
 from .roles import lang_of
-from .utils import format_order, h
+from .order_card import edit_order_card, send_order_card
+from .utils import h
 
 log = logging.getLogger(__name__)
 
@@ -56,11 +57,10 @@ async def notify_managers_done(bot: Bot, order: dict) -> None:
 async def notify_new_order(bot: Bot, order_id: int, notify_customer: bool = True) -> None:
     order = await db.get_order(order_id)
     items = await db.get_order_items(order_id)
-    text = "🔔 <b>YANGI BUYURTMA!</b>\n\n" + format_order(order, items)
     kb = order_staff_kb(order)
     for chat_id in await staff_recipients():
         try:
-            msg = await bot.send_message(chat_id, text, reply_markup=kb)
+            msg = await send_order_card(bot, chat_id, order, items, "🔔 YANGI BUYURTMA", kb)
             await db.save_order_message(order_id, chat_id, msg.message_id)
         except (TelegramForbiddenError, TelegramBadRequest) as e:
             log.warning("Xodimga yuborib bo'lmadi %s: %s", chat_id, e)
@@ -83,13 +83,10 @@ async def refresh_staff_messages(bot: Bot, order_id: int) -> None:
     """Holat o'zgarganda barcha xodimlardagi xabarni yangilaydi."""
     order = await db.get_order(order_id)
     items = await db.get_order_items(order_id)
-    text = format_order(order, items)
     kb: InlineKeyboardMarkup | None = order_staff_kb(order)
     for m in await db.get_order_messages(order_id):
         try:
-            await bot.edit_message_text(
-                text, chat_id=m["chat_id"], message_id=m["message_id"], reply_markup=kb
-            )
+            await edit_order_card(bot, m["chat_id"], m["message_id"], order, items, kb)
         except TelegramBadRequest as e:
             if "not modified" not in str(e):
                 log.debug("Edit failed: %s", e)
@@ -103,11 +100,20 @@ async def delete_order(bot: Bot | None, order: dict) -> None:
     if not bot:
         return
     text = f"🗑 <s>Buyurtma {order['code']}</s>\n\nMenejer tomonidan o'chirildi."
+    from aiogram.types import InputRichBlockParagraph, InputRichMessage, RichTextStrikethrough
+
+    rich = InputRichMessage(blocks=[InputRichBlockParagraph(text=[
+        "🗑 ", RichTextStrikethrough(text=f"Buyurtma {order['code']}"), " — menejer tomonidan o'chirildi."])])
     for m in messages:
-        try:
-            await bot.edit_message_text(text, chat_id=m["chat_id"], message_id=m["message_id"], reply_markup=None)
-        except (TelegramBadRequest, TelegramForbiddenError):
-            pass
+        for kwargs in ({"rich_message": rich}, {"text": text}):  # rich kartani rich bilan, eskisini matn bilan
+            try:
+                await bot.edit_message_text(chat_id=m["chat_id"], message_id=m["message_id"], reply_markup=None,
+                                            **kwargs)
+                break
+            except TelegramBadRequest:
+                continue
+            except TelegramForbiddenError:
+                break
 
 
 def customer_status_text(order: dict, lang: str, cafe_address: str = "") -> str | None:
@@ -172,10 +178,10 @@ async def remind_scheduled(bot: Bot) -> None:
     for order in await db.due_scheduled_orders(until):
         await db.mark_reminded(order["id"])
         items = await db.get_order_items(order["id"])
-        text = "⏰ <b>ESLATMA: vaqtga buyurtmani tayyorlash vaqti!</b>\n\n" + format_order(order, items)
         for chat_id in await staff_recipients():
             try:
-                msg = await bot.send_message(chat_id, text, reply_markup=order_staff_kb(order))
+                msg = await send_order_card(bot, chat_id, order, items, "⏰ ESLATMA: tayyorlash vaqti",
+                                            order_staff_kb(order))
                 await db.save_order_message(order["id"], chat_id, msg.message_id)
             except (TelegramForbiddenError, TelegramBadRequest):
                 pass

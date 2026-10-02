@@ -174,3 +174,19 @@ async def test_russian_api(client):
     st, data = await post(client, "/api/orders", ORDER)
     assert data["order"]["items"][0]["name"] == "Классический хотдог"
     assert data["order"]["status_label"].endswith("Ожидает подтверждения")
+
+
+def test_slots_today_only():
+    from datetime import datetime
+
+    from app import hours
+    from app.utils import TZ
+
+    settings = {"mode": "auto", "schedule": '{"mon":["10:00","23:00"],"tue":["10:00","23:00"],"wed":["10:00","23:00"],'
+                '"thu":["10:00","23:00"],"fri":["10:00","23:00"],"sat":["10:00","23:00"],"sun":["10:00","23:00"]}',
+                "prep_time": "40", "slot_step": "30"}
+    days = hours.slots(settings, datetime(2026, 10, 2, 12, 0, tzinfo=TZ))
+    assert [d["day"] for d in days] == ["today"]
+    # kech kirilganda ertangi kun taklif qilinmaydi
+    assert hours.slots(settings, datetime(2026, 10, 2, 22, 50, tzinfo=TZ)) == []
+    assert not hours.valid_slot(settings, "2026-10-03 12:00", datetime(2026, 10, 2, 12, 0, tzinfo=TZ))

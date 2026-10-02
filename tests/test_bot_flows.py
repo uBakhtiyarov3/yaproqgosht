@@ -39,8 +39,14 @@ class FakeSession(BaseSession):
         pass
 
     def texts(self, chat_id=None):
-        return [getattr(c, "text", None) or getattr(c, "caption", None) or "" for c in self.calls
-                if chat_id is None or getattr(c, "chat_id", None) == chat_id]
+        def text_of(c):
+            rich = getattr(c, "rich_message", None)
+            if rich is not None:
+                return rich.model_dump_json()  # json: unicode escape bo'lmasligi uchun quyida decode
+            return getattr(c, "text", None) or getattr(c, "caption", None) or ""
+        import json
+        return [json.dumps(json.loads(t), ensure_ascii=False) if t.startswith("{") else t
+                for t in (text_of(c) for c in self.calls if chat_id is None or getattr(c, "chat_id", None) == chat_id)]
 
 
 @pytest.fixture
@@ -436,3 +442,49 @@ async def test_delete_order_manager_only(env):
     await click(bot, dp, ADMIN, f"odl:{oid}")
     assert await db.get_order(oid) is None
     assert any("o'chirildi" in t for t in s.texts(STAFF))  # xodimdagi xabar yangilandi
+
+
+async def _staff_and_order(bot, dp):
+    for uid in (ADMIN, STAFF, CUSTOMER):
+        await send(bot, dp, uid, "/start")
+    await db.set_role(STAFF, "staff")
+    return await db.create_order(CUSTOMER, {"name": "Ali", "phone": "+998901234567", "address": "Chilonzor 5",
+                                            "payment_method": "cash", "comment": "Piyozsiz"},
+                                 [{"product_id": 1, "name": "Burger", "variant": "", "price": 25000, "qty": 2}], 10000)
+
+
+async def test_staff_gets_rich_order_card(env):
+    bot, dp, s = env
+    oid = await _staff_and_order(bot, dp)
+    s.calls.clear()
+    await notify_new_order(bot, oid, notify_customer=False)
+    rich = [c for c in s.calls if type(c).__name__ == "SendRichMessage" and c.chat_id == STAFF]
+    assert len(rich) == 1 and rich[0].reply_markup  # bitta xabar, tugmalari bilan
+    types = [b.type for b in rich[0].rich_message.blocks]
+    assert types.count("table") == 2 and "heading" in types and "blockquote" in types
+    card = s.texts(STAFF)[0]
+    assert "YANGI BUYURTMA" in card and "50 000 so'm" in card and "Piyozsiz" in card
+    # holat o'zgarganda o'sha xabar rich ko'rinishda yangilanadi
+    s.calls.clear()
+    await click(bot, dp, STAFF, f"ost:{oid}:accepted")
+    edits = [c for c in s.calls if type(c).__name__ == "EditMessageText" and c.chat_id == STAFF]
+    assert edits and edits[0].rich_message is not None
+
+
+async def test_rich_card_falls_back_to_text(env, monkeypatch):
+    from aiogram.exceptions import TelegramBadRequest
+
+    bot, dp, s = env
+    oid = await _staff_and_order(bot, dp)
+    orig = s.make_request
+
+    async def no_rich(bot_, method, timeout=None):
+        if type(method).__name__ == "SendRichMessage":
+            raise TelegramBadRequest(method=method, message="Bad Request: rich messages unsupported")
+        return await orig(bot_, method, timeout)
+
+    monkeypatch.setattr(s, "make_request", no_rich)
+    s.calls.clear()
+    await notify_new_order(bot, oid, notify_customer=False)
+    plain = [c for c in s.calls if type(c).__name__ == "SendMessage" and c.chat_id == STAFF]
+    assert plain and "YANGI BUYURTMA" in plain[0].text and plain[0].reply_markup

@@ -74,7 +74,7 @@ def next_opening(settings: dict, dt: datetime | None = None) -> datetime | None:
 
 
 def slots(settings: dict, dt: datetime | None = None) -> list[dict]:
-    """Bugun va ertaga uchun tanlanadigan vaqtlar: [{"day": "today", "date": ..., "times": [{"value", "label"}]}]."""
+    """Faqat bugun uchun tanlanadigan vaqtlar (ertangi kunga buyurtma olinmaydi): [{"day": "today", "date": ..., "times": [{"value", "label"}]}]."""
     if (settings.get("mode") or "auto") == "closed":
         return []
     dt = dt or now()
@@ -83,7 +83,7 @@ def slots(settings: dict, dt: datetime | None = None) -> list[dict]:
     step = max(10, int(settings.get("slot_step") or 30))
     earliest = dt + timedelta(minutes=prep)
     result = []
-    for offset, key in ((0, "today"), (1, "tomorrow")):
+    for offset, key in ((0, "today"),):
         day = dt.date() + timedelta(days=offset)
         w = day_window(schedule, day)
         if not w:
