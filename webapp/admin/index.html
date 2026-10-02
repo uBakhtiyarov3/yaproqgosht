@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#071a10">
+  <title>Yaproq go'sht — Admin panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css?v={{v}}">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="../config.js?v={{v}}"></script>
+</head>
+<body>
+  <div class="bg" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
+
+  <!-- Kirish -->
+  <div class="login hidden" id="login">
+    <div class="login-card glass">
+      <div class="crown">♛</div>
+      <h1 class="logo">Yaproq go'sht</h1>
+      <p class="muted">Admin panel</p>
+      <div class="login-msg" id="login-msg"></div>
+      <ol class="login-steps">
+        <li>Telegramda botni oching</li>
+        <li><b>👑 Menejer paneli</b> → <b>🖥 Web panel</b> tugmasini bosing</li>
+        <li>Kelgan havola orqali panelga kirasiz (havola 15 daqiqa amal qiladi)</li>
+      </ol>
+      <a class="btn primary hidden" id="login-bot" target="_blank" rel="noopener">Botni ochish</a>
+    </div>
+  </div>
+
+  <!-- Asosiy -->
+  <div class="shell hidden" id="shell">
+    <aside class="sidebar glass" id="sidebar">
+      <div class="brand"><span class="crown sm">♛</span><div><b>Yaproq go'sht</b><small>Admin panel</small></div></div>
+      <nav id="nav">
+        <a data-page="dashboard">📊 <span>Statistika</span></a>
+        <a data-page="orders">📦 <span>Buyurtmalar</span><em class="pill hidden" id="nav-active"></em></a>
+        <a data-page="menu">🍔 <span>Menyu va rasmlar</span></a>
+        <a data-page="texts">💬 <span>Bot xabarlari</span></a>
+        <a data-page="settings">⚙️ <span>Sozlamalar va ish vaqti</span></a>
+        <a data-page="promos">🎁 <span>Promo-kodlar</span></a>
+        <a data-page="reviews">⭐ <span>Baholar</span></a>
+        <a data-page="broadcast">📢 <span>Rassilka</span></a>
+        <a data-page="customers">🙋 <span>Mijozlar</span></a>
+        <a data-page="staff">👥 <span>Xodimlar</span></a>
+        <a data-page="tools">💾 <span>Hisobot va zaxira</span></a>
+      </nav>
+      <div class="me" id="me"></div>
+    </aside>
+    <div class="sidebar-backdrop hidden" id="sidebar-backdrop"></div>
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-toggle" id="menu-toggle" aria-label="Menyu">☰</button>
+        <h1 id="page-title"></h1>
+        <div class="status-chip" id="status-chip"></div>
+      </header>
+      <div id="page" class="page"></div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modal-backdrop">
+    <div class="modal glass" id="modal" role="dialog" aria-modal="true"></div>
+  </div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="admin.js?v={{v}}"></script>
+</body>
+</html>

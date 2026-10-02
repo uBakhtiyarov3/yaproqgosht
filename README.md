@@ -19,7 +19,18 @@
 - Bir xodim holatni o'zgartirsa, xabar boshqa xodimlarda ham yangilanadi (bitta buyurtmani ikki kishi ikki marta qabul qilib qo'ymaydi).
 - Bekor qilish (sababini tanlab), yangi/faol/o'z buyurtmalari ro'yxatlari, bugungi natija, `/order <ID>` orqali qidirish.
 
-### 👑 Menejer paneli (`/admin`)
+### 🖥 Admin web panel (`/admin/`)
+Botning **hamma narsasi** brauzerdagi panelda boshqariladi. Saqlash tugmasi bosilishi bilan bot va Mini App **darhol** yangilanadi (qayta ishga tushirish kerak emas).
+- **Kirish:** botda *👑 Menejer paneli → 🖥 Web panel* → bir martalik havola (15 daqiqa). Sessiya 14 kun saqlanadi. Faqat menejerlar kira oladi.
+- 📊 Statistika (tushum, holatlar, kunlik grafik, top mahsulotlar, xodimlar, reyting, promo chegirmalar).
+- 📦 Buyurtmalar: filtr, qidiruv, tafsilot, holatni o'zgartirish va bekor qilish (mijozga avtomatik xabar), yangi buyurtma ovozli signali.
+- 🍔 Menyu: kategoriyalar (qo'shish, uz/ru nomi, emoji, yashirish, tartib, o'chirish); mahsulotlar (uz/ru nomi va tavsifi, o'lcham va narxlar, badge'lar, chegirma va muddati, sotuvda/yo'q, tartib).
+- 📸 Rasm yuklash: drag-and-drop, nisbat/o'lcham/hajm ko'rsatkichlari, ideal rasm talablari, avtomatik 4:3 kesish va 1200×900 JPG optimallashtirish.
+- 💬 **Bot xabarlari**: barcha menyulardagi barcha xabarlar va tugmalar (uz/ru) — formatlash paneli (qalin, kursiv, tagiga chizilgan, kod, spoiler, iqtibos, havola), o'zgaruvchilar (`{name}`...), Telegram'dagi ko'rinishi, xatolarni tekshirish, asl holiga qaytarish.
+- ⚙️ Sozlamalar: avto/ochiq/yopiq rejim, kunlik ish vaqti, yetkazish/olib ketish, narxlar, tayyorlash vaqti, slot qadami, telefon, manzil.
+- 🎁 Promo-kodlar, ⭐ baholar, 📢 rassilka (rasm, formatlash, havola tugmalari, test), 🙋 mijozlar, 👥 xodimlar, 📥 CSV hisobot va 💾 zaxira nusxa.
+
+### 👑 Menejer paneli (bot ichida, `/admin`)
 - 📊 **Statistika**: bugun / 7 kun / 30 kun / barcha vaqt — tushum, o'rtacha chek, holatlar kesimida buyurtmalar, top mahsulotlar, xodimlar natijasi, kunlik tushum, yangi foydalanuvchilar.
 - 📦 **Barcha buyurtmalar**: faol, yetkazilgan va bekor qilingan buyurtmalar.
 - 🍔 **Menyuni boshqarish**:
@@ -77,10 +88,14 @@ app/orders.py         — buyurtma tekshiruv qoidalari (Mini App va bot uchun um
 app/handlers/shop.py   — bot ichida menyu, savat, rasmiylashtirish, buyurtmalarim
 app/handlers/common.py — /start, aloqa, fikr-mulohaza
 app/handlers/staff.py  — xodim kabineti, holat tugmalari
-app/handlers/admin.py  — menejer paneli
+app/handlers/admin.py  — menejer paneli (bot ichida)
+app/admin_api.py      — admin web panel API (/api/admin/*)
+app/texts_admin.py    — tahrirlanadigan bot matnlari katalogi va tekshiruvi
 app/backup.py         — zaxira nusxa (qo'lda va har kuni 04:00 da)
 deploy/               — install.sh, update.sh, Caddyfile (HTTPS)
 webapp/               — Mini App (HTML/CSS/JS) va mahsulot rasmlari
+webapp/admin/         — admin web panel
+deploy/build_static.sh — Mini App + admin panelni shared hostingga tayyorlash
 tests/                — API va bot oqimlari testlari
 ```
 

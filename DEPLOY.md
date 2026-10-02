@@ -102,11 +102,36 @@ Keyin o'zi: swap yaratadi, Docker o'rnatadi, portlarni ochadi, botni va HTTPS ni
 | Loglarni ko'rish | `sudo docker compose logs -f bot` |
 | Qayta ishga tushirish | `sudo docker compose restart bot` |
 | Kodni yangilash | `bash deploy/update.sh` |
+| Admin panel | botda *👑 Menejer paneli → 🖥 Web panel* |
 | To'xtatish | `sudo docker compose down` |
 
 - Server qayta yuklansa, bot **o'zi avtomatik ishga tushadi** (`restart: unless-stopped`).
 - **Zaxira nusxa:** har kuni soat 04:00 da bosh menejerga `.zip` fayl keladi. Qo'lda olish: *Menejer paneli → 💾 Zaxira nusxa*.
 - **Tiklash:** `sudo docker compose down` → zip ichidagi `data/` papkani loyiha papkasiga ko'chiring → `sudo docker compose up -d`.
+
+---
+
+## 🌐 Mini App va admin panelni shared hostingga ko'chirish (nexiaacademy.uz/yaproqgosht/)
+
+Bot va API serverda (Google Cloud) qoladi, faqat **web fayllar** (Mini App + admin panel) hostingda turadi.
+
+1. **Kompyuterda yoki serverda** zip tayyorlang (server manzilini yozing):
+   ```bash
+   bash deploy/build_static.sh https://yaproqgosht.duckdns.org
+   ```
+   Natija: `dist/yaproqgosht-web.zip`. (Serverda qilsangiz, faylni `scp` yoki Google Cloud SSH oynasidagi *Download file* orqali oling.)
+2. **DirectAdmin → File Manager** → `public_html/yaproqgosht/` papkasini oching (yo'q bo'lsa yarating) → zip'ni yuklang → **Extract**.
+3. **Serverdagi `.env`** faylini o'zgartiring (`nano ~/yaproqgosht/.env`):
+   ```
+   WEBAPP_URL=https://nexiaacademy.uz/yaproqgosht
+   CORS_ORIGINS=https://nexiaacademy.uz
+   ```
+   va qayta ishga tushiring: `cd ~/yaproqgosht && sudo docker compose up -d`.
+4. Tekshiring: botga `/start` → Mini App `nexiaacademy.uz/yaproqgosht/` dan ochiladi; *Menejer paneli → 🖥 Web panel* havolasi `nexiaacademy.uz/yaproqgosht/admin/` ga olib boradi.
+
+> Rasmlar, menyu va barcha ma'lumotlar serverda saqlanadi — hostingdagi fayllarni faqat **dizayn/kod yangilanganda** qayta yuklash kerak (1-qadamni takrorlang). Menyu, narx, rasm, matn o'zgarishlari uchun hech narsa yuklash shart emas — admin paneldan saqlash kifoya.
+>
+> Hostingni ishlatmasangiz ham bo'ladi: panel serverning o'zida ham ochiladi — `https://SERVER-DOMEN/admin/`.
 
 ---
 
