@@ -113,25 +113,76 @@ Keyin o'zi: swap yaratadi, Docker o'rnatadi, portlarni ochadi, botni va HTTPS ni
 
 ## 🌐 Mini App va admin panelni shared hostingga ko'chirish (nexiaacademy.uz/yaproqgosht/)
 
-Bot va API serverda (Google Cloud) qoladi, faqat **web fayllar** (Mini App + admin panel) hostingda turadi.
+Bot, baza va rasmlar **Google Cloud serverda qoladi**. Hostingga faqat web fayllar (Mini App + admin panel) yuklanadi.
+Natijada mijoz Mini App'ni `https://nexiaacademy.uz/yaproqgosht/`, admin esa panelni `https://nexiaacademy.uz/yaproqgosht/admin/` dan ochadi.
 
-1. **Kompyuterda yoki serverda** zip tayyorlang (server manzilini yozing):
-   ```bash
-   bash deploy/build_static.sh https://yaproqgosht.duckdns.org
-   ```
-   Natija: `dist/yaproqgosht-web.zip`. (Serverda qilsangiz, faylni `scp` yoki Google Cloud SSH oynasidagi *Download file* orqali oling.)
-2. **DirectAdmin → File Manager** → `public_html/yaproqgosht/` papkasini oching (yo'q bo'lsa yarating) → zip'ni yuklang → **Extract**.
-3. **Serverdagi `.env`** faylini o'zgartiring (`nano ~/yaproqgosht/.env`):
-   ```
-   WEBAPP_URL=https://nexiaacademy.uz/yaproqgosht
-   CORS_ORIGINS=https://nexiaacademy.uz
-   ```
-   va qayta ishga tushiring: `cd ~/yaproqgosht && sudo docker compose up -d`.
-4. Tekshiring: botga `/start` → Mini App `nexiaacademy.uz/yaproqgosht/` dan ochiladi; *Menejer paneli → 🖥 Web panel* havolasi `nexiaacademy.uz/yaproqgosht/admin/` ga olib boradi.
+### 1. Serverda: kodni yangilash va zip tayyorlash (Google Cloud → SSH)
+```bash
+cd ~/yaproqgosht
+bash deploy/update.sh                       # eng oxirgi kod
+grep -E "^(DOMAIN|WEBAPP_URL)=" .env        # server domeningizni ko'ring
+bash deploy/build_static.sh https://SERVER-DOMEN
+realpath dist/yaproqgosht-web.zip           # faylning to'liq yo'li
+```
+`SERVER-DOMEN` — `DOMAIN=` qatoridagi qiymat (masalan `yaproqgosht.duckdns.org`). **`nexiaacademy.uz` emas!**
 
-> Rasmlar, menyu va barcha ma'lumotlar serverda saqlanadi — hostingdagi fayllarni faqat **dizayn/kod yangilanganda** qayta yuklash kerak (1-qadamni takrorlang). Menyu, narx, rasm, matn o'zgarishlari uchun hech narsa yuklash shart emas — admin paneldan saqlash kifoya.
->
-> Hostingni ishlatmasangiz ham bo'ladi: panel serverning o'zida ham ochiladi — `https://SERVER-DOMEN/admin/`.
+Zip'ni kompyuterga olish: SSH oynasining yuqori o'ng burchagidagi **⚙️ (yoki «⬇ Download file»)** → oxirgi buyruq ko'rsatgan yo'lni qo'ying (masalan `/home/ism/yaproqgosht/dist/yaproqgosht-web.zip`) → **Download**.
+
+### 2. Hostingda SSL borligini tekshiring (DirectAdmin)
+Telegram faqat `https://` manzillarni ochadi.
+**Account Manager → SSL Certificates** → `nexiaacademy.uz` uchun Let's Encrypt yoqilgan bo'lsin (yo'q bo'lsa: *Get automatic certificate from ACME Provider* → `nexiaacademy.uz` va `www.nexiaacademy.uz` → **Save**). Brauzerda `https://nexiaacademy.uz` qulf belgisi bilan ochilishi kerak.
+
+### 3. Fayllarni yuklash (DirectAdmin → File Manager)
+1. **System Info & Files → File Manager**.
+2. `domains/nexiaacademy.uz/public_html` papkasiga kiring.
+3. **New Folder** → nomi `yaproqgosht` → ichiga kiring.
+4. **Upload** → `yaproqgosht-web.zip` ni tanlang → yuklanib bo'lgach orqaga qayting.
+5. Zip ustida o'ng tugma (yoki belgilab) → **Extract** → shu papkaning o'ziga oching. Keyin zip'ni o'chirib yuborsa bo'ladi.
+
+Papka ichida shular bo'lishi kerak (ichma-ich papka **bo'lmasin**):
+```
+public_html/yaproqgosht/
+├── index.html  app.js  style.css  config.js  .htaccess
+└── admin/  (index.html  admin.js  admin.css  .htaccess)
+```
+> Terminal orqali ham bo'ladi (zip `public_html/yaproqgosht/` ga yuklangan bo'lsa):
+> `cd ~/domains/nexiaacademy.uz/public_html/yaproqgosht && unzip -o yaproqgosht-web.zip && rm yaproqgosht-web.zip`
+
+### 4. Serverga yangi manzilni aytish (Google Cloud → SSH)
+```bash
+cd ~/yaproqgosht
+nano .env
+```
+Quyidagilarni o'zgartiring/qo'shing (`DOMAIN=` ga **tegmang**):
+```
+WEBAPP_URL=https://nexiaacademy.uz/yaproqgosht
+CORS_ORIGINS=https://nexiaacademy.uz,https://www.nexiaacademy.uz
+```
+Saqlash: `Ctrl+O` → `Enter` → `Ctrl+X`. Keyin:
+```bash
+sudo docker compose up -d --force-recreate bot
+sudo docker compose logs --tail 20 bot     # "WEBAPP_URL=https://nexiaacademy.uz/yaproqgosht" ko'rinsin
+```
+
+### 5. Tekshirish
+| Nima | Kutilgan natija |
+|---|---|
+| `https://SERVER-DOMEN/health` | `{"ok": true, ...}` |
+| `https://nexiaacademy.uz/yaproqgosht/` (oddiy brauzerda) | «Ilovani Telegram orqali oching» — bu **normal** |
+| `https://nexiaacademy.uz/yaproqgosht/admin/` | Admin panel kirish oynasi |
+| Botda `/start` → **📋 Menyu** → «Mini ilovada ochish» | Menyu rasmlar bilan ochiladi |
+| *👑 Menejer paneli → 🖥 Web panel* | Havola `nexiaacademy.uz/yaproqgosht/admin/` ga olib kiradi |
+
+### Keyin nima qilinadi?
+- **Menyu, narx, rasm, matn, sozlamalar** — faqat admin panelda saqlang. Hostingga hech narsa yuklash kerak emas.
+- **Kod/dizayn yangilanganda** (men yangi funksiya qo'shsam): 1-qadam (zip) va 3-qadam (yuklash + Extract, ustidan yozish)ni takrorlang.
+
+### Muammo bo'lsa
+- **Mini App ochiladi, lekin menyu chiqmaydi / «Server bilan aloqa yo'q»** → `.env` dagi `CORS_ORIGINS` ni tekshiring (`https://` bilan, oxirida `/` siz) va 4-qadamdagi `--force-recreate` ni bajaring. `config.js` ichida server manzili to'g'ri ekanini tekshiring (File Manager → `config.js` → Edit).
+- **Eski ko'rinish chiqyapti** → Telegram'da Mini App'ni yopib qayta oching; File Manager'da `.htaccess` fayllar borligini tekshiring (yashirin fayllarni ko'rsatish yoqilgan bo'lsin).
+- **403 / 404** → fayllar `public_html/yaproqgosht/` ning **o'zida** ekanini tekshiring (`yaproqgosht/yaproqgosht/` emas).
+- **Admin panelga havola ishlamayapti** → havola 15 daqiqa va bir martalik; botdan yangisini oling.
+- Hostingdan voz kechsangiz: `.env` da `WEBAPP_URL=https://SERVER-DOMEN` qilib, `--force-recreate` — hammasi yana serverning o'zidan ishlaydi.
 
 ---
 

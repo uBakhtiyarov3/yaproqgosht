@@ -52,12 +52,8 @@ class B:
 
 
 def main_kb(role: str, lang: str = "uz") -> ReplyKeyboardMarkup:
-    rows = []
-    if webapp_ready():
-        # Eslatma: reply-klaviatura orqali ochilgan Mini App ga Telegram initData bermaydi,
-        # shuning uchun bu oddiy tugma — bosilganda bot inline web_app tugmasini yuboradi.
-        rows.append([KeyboardButton(text=t("b_menu_mini", lang))])
-    rows += [
+    # Mini App alohida katta tugma emas — «📋 Menyu» ichidagi inline tugma orqali ochiladi
+    rows = [
         [KeyboardButton(text=t("b_menu", lang)), KeyboardButton(text=t("b_cart", lang))],
         [KeyboardButton(text=t("b_orders", lang)), KeyboardButton(text=t("b_contact", lang))],
         [KeyboardButton(text=t("b_about", lang)), KeyboardButton(text=t("b_lang", lang))],
