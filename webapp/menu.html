@@ -3,145 +3,137 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0a1f14">
-  <title>Yaproq go'sht — Menyu</title>
+  <meta name="theme-color" content="#f4ecdd">
+  <title>Yaproq go'sht — Taomnoma</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Montserrat:wght@600;700;800;900&family=Great+Vibes&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="config.js"></script>
   <style>
     :root {
-      --bg: #0a1f14;
-      --panel: rgba(255, 255, 255, .035);
-      --line: rgba(217, 181, 108, .32);
-      --gold: #d9b56c;
-      --gold-2: #f3dca4;
-      --gold-3: #a67c34;
-      --cream: #f2e9d8;
-      --cream-ink: #1b2a20;
-      --text: #f6f1e6;
-      --muted: rgba(246, 241, 230, .62);
-      --red: #ff7a66;
+      --paper: #f4ecdd;
+      --paper-2: #efe4d0;
+      --ink: #14261b;
+      --ink-2: rgba(20, 38, 27, .66);
+      --green: #1f4d34;
+      --green-2: #2c6a48;
+      --gold: #b8862f;
+      --gold-soft: rgba(184, 134, 47, .16);
+      --line: rgba(20, 38, 27, .14);
+      --sale: #c2412d;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
     body {
       background:
-        radial-gradient(1100px 600px at 85% -5%, rgba(46, 120, 76, .35), transparent 60%),
-        radial-gradient(900px 700px at -10% 105%, rgba(166, 124, 52, .16), transparent 60%),
-        var(--bg);
-      color: var(--text);
-      font-family: Montserrat, system-ui, sans-serif;
+        radial-gradient(900px 500px at 100% 0, rgba(184, 134, 47, .13), transparent 60%),
+        radial-gradient(800px 600px at 0 100%, rgba(31, 77, 52, .10), transparent 60%),
+        var(--paper);
+      color: var(--ink);
+      font-family: Manrope, system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
-    .poster { max-width: 1180px; margin: 0 auto; padding: 34px 26px 30px; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 0 28px; }
 
-    /* ---------- sarlavha ---------- */
-    .head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; margin-bottom: 26px; }
-    .script { font-family: "Great Vibes", cursive; font-weight: 400; color: var(--text); line-height: .95; }
-    .head .script { font-size: 44px; transform: rotate(-8deg); opacity: .92; }
-    .brand { text-align: center; }
-    .crown { width: 64px; height: 40px; margin: 0 auto 2px; display: block; }
-    .logo {
-      font-family: "Playfair Display", serif; font-weight: 800; font-size: clamp(46px, 8vw, 96px); line-height: 1;
-      margin: 0; letter-spacing: -.5px;
-      background: linear-gradient(180deg, #fbefcf 0%, var(--gold-2) 35%, var(--gold) 70%, var(--gold-3) 100%);
-      -webkit-background-clip: text; background-clip: text; color: transparent;
+    /* ---------- bosh qism ---------- */
+    .top { padding: 42px 0 30px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 24px; border-bottom: 2px solid var(--ink); }
+    .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .32em; text-transform: uppercase; color: var(--gold); }
+    .title { margin: 10px 0 0; font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: clamp(54px, 9vw, 118px); line-height: .9; letter-spacing: -.02em; }
+    .title em { font-style: italic; font-weight: 500; color: var(--green-2); }
+    .meta { text-align: right; font-size: 14px; line-height: 1.7; color: var(--ink-2); font-weight: 600; }
+    .meta b { color: var(--ink); }
+    .stamp {
+      display: inline-grid; place-items: center; width: 124px; height: 124px; border-radius: 50%;
+      border: 2px dashed var(--gold); color: var(--gold); font-weight: 800; font-size: 9.5px; letter-spacing: .08em;
+      text-transform: uppercase; text-align: center; line-height: 1.35; transform: rotate(-12deg); margin-bottom: 14px;
     }
-    .tagline { margin-top: 12px; font-weight: 600; letter-spacing: .42em; font-size: 14px; color: var(--cream); }
-    .slogan { justify-self: end; text-align: right; font-weight: 700; letter-spacing: .24em; font-size: 14px; line-height: 2; color: var(--cream); }
-    .slogan::after { content: ""; display: block; width: 44px; height: 2px; background: var(--gold); margin: 8px 0 0 auto; }
+    .stamp b { display: block; font-family: Fraunces, serif; font-size: 26px; letter-spacing: 0; margin: 2px 0; }
 
-    /* ---------- bo'limlar ---------- */
-    .section {
-      position: relative; border: 1px solid var(--line); border-radius: 18px; background: var(--panel);
-      padding: 22px 24px 24px; margin-bottom: 18px; overflow: hidden;
+    /* ---------- tanlov (hit / top / chegirma) ---------- */
+    .featured { margin: 34px 0 10px; }
+    .featured h2 { font-size: 15px; font-weight: 800; letter-spacing: .26em; text-transform: uppercase; color: var(--green); margin: 0 0 16px; }
+    .feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+    .feat {
+      position: relative; border-radius: 22px; overflow: hidden; min-height: 300px; color: #fff;
+      background: var(--green) center / cover no-repeat; display: flex; flex-direction: column; justify-content: flex-end;
+      box-shadow: 0 18px 40px rgba(20, 38, 27, .22);
     }
-    .section.cream { background: var(--cream); color: var(--cream-ink); border-color: rgba(166, 124, 52, .45); }
-    .sec-title { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; padding-right: 150px; }
-    .sec-title h2 {
-      margin: 0; font-weight: 900; text-transform: uppercase; font-size: clamp(26px, 4.2vw, 48px);
-      letter-spacing: .01em; line-height: 1; white-space: nowrap;
-    }
-    .sec-title .sub { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
-    .cream .sec-title .sub { color: rgba(27, 42, 32, .62); }
-    .sec-title .rule { flex: 1; height: 1px; background: currentColor; opacity: .35; min-width: 30px; }
-    .deco {
-      position: absolute; right: 26px; top: 50%; transform: translateY(-50%) rotate(-10deg);
-      font-size: 42px; text-align: center; width: 150px; pointer-events: none; opacity: .9;
-    }
-    .cream .deco { color: var(--cream-ink); }
+    .feat::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, rgba(8, 20, 13, .9)); }
+    .feat > * { position: relative; z-index: 1; }
+    .feat .in { padding: 20px 22px; }
+    .feat .nm { font-family: Fraunces, serif; font-size: 28px; font-weight: 700; line-height: 1.1; }
+    .feat .ds { font-size: 13px; opacity: .8; margin-top: 6px; }
+    .feat .pr { margin-top: 10px; font-weight: 800; font-size: 20px; }
+    .feat .pr s { opacity: .55; font-weight: 600; font-size: 14px; margin-right: 8px; }
+    .feat .chips { position: absolute; top: 16px; left: 16px; z-index: 1; }
 
-    .items { display: grid; gap: 0; margin-right: 150px; }
-    .item { padding: 0 18px; display: flex; flex-direction: column; min-width: 0; }
-    .item + .item { border-left: 1px solid var(--line); }
-    .item:first-child { padding-left: 0; }
-    .item-name { font-weight: 800; text-transform: uppercase; font-size: 15px; line-height: 1.2; min-height: 2.4em; letter-spacing: .01em; }
-    .pic {
-      position: relative; aspect-ratio: 4 / 3; border-radius: 16px; overflow: hidden; margin: 10px 0 14px;
-      background: rgba(0, 0, 0, .25) center / cover no-repeat; box-shadow: 0 14px 30px rgba(0, 0, 0, .35);
-    }
-    .cream .pic { box-shadow: 0 14px 28px rgba(60, 40, 10, .25); }
-    .pic.empty { display: grid; place-items: center; font-size: 46px; }
-    .tags { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
-    .tag { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 99px; background: rgba(10, 31, 20, .82); color: var(--gold-2); }
-    .off { position: absolute; top: 8px; right: 8px; background: var(--red); color: #fff; font-weight: 900; font-size: 13px; padding: 3px 9px; border-radius: 99px; }
-    .prices { margin-top: auto; display: grid; gap: 2px; }
-    .price-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-    .price-row .v { font-weight: 600; font-size: 15px; opacity: .85; }
-    .price { font-weight: 800; font-size: 22px; letter-spacing: .01em; white-space: nowrap; }
-    .price.big { font-size: 26px; }
-    .price s { font-size: 13px; font-weight: 600; opacity: .55; margin-right: 6px; }
-    .price .now { color: var(--gold-2); }
-    .cream .price .now { color: #8a5a12; }
+    /* ---------- kategoriyalar ---------- */
+    .cats { columns: 2; column-gap: 54px; padding: 30px 0 10px; }
+    .cat { break-inside: avoid; margin-bottom: 40px; }
+    .cat-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--ink); margin-bottom: 6px; }
+    .cat-num { font-family: Fraunces, serif; font-weight: 900; font-size: 44px; line-height: 1; color: transparent; -webkit-text-stroke: 1.4px var(--gold); }
+    .cat-head h2 { margin: 0; font-family: Fraunces, Georgia, serif; font-size: 32px; font-weight: 700; line-height: 1.05; flex: 1; }
+    .cat-count { font-size: 12px; font-weight: 700; color: var(--ink-2); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 
-    /* kichik bo'limlar bir qatorda */
-    .row { display: grid; gap: 18px; margin-bottom: 18px; }
-    .row .section { margin-bottom: 0; }
-    .row .sec-title { padding-right: 0; }
-    .row .items { margin-right: 0; }
-    .row .sec-title h2 { font-size: clamp(22px, 3vw, 36px); white-space: normal; overflow-wrap: anywhere; }
+    .dish { display: grid; grid-template-columns: 92px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px dashed var(--line); align-items: center; }
+    .dish:last-child { border-bottom: 0; }
+    .ph {
+      width: 92px; height: 92px; border-radius: 50%; background: var(--paper-2) center / cover no-repeat;
+      box-shadow: 0 0 0 4px var(--paper), 0 0 0 5px var(--gold-soft), 0 10px 22px rgba(20, 38, 27, .18);
+      display: grid; place-items: center; font-size: 34px;
+    }
+    .row1 { display: flex; align-items: baseline; gap: 8px; }
+    .dname { font-weight: 800; font-size: 17px; line-height: 1.25; }
+    .dots { flex: 1; border-bottom: 2px dotted rgba(20, 38, 27, .28); transform: translateY(-4px); min-width: 16px; }
+    .price { font-weight: 800; font-size: 18px; white-space: nowrap; color: var(--green); }
+    .price s { color: var(--ink-2); font-weight: 600; font-size: 13px; margin-right: 6px; }
+    .price.sale { color: var(--sale); }
+    .desc { font-size: 13.5px; color: var(--ink-2); line-height: 1.45; margin-top: 4px; }
+    .sizes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+    .size {
+      display: inline-flex; gap: 8px; align-items: baseline; padding: 5px 11px; border-radius: 99px;
+      background: rgba(255, 255, 255, .55); border: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--ink-2);
+    }
+    .size b { color: var(--green); font-size: 14.5px; }
+    .size s { font-size: 11.5px; }
+    .size.sale b { color: var(--sale); }
+    .chips { display: inline-flex; gap: 5px; flex-wrap: wrap; vertical-align: middle; }
+    .chip { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; padding: 3px 8px; border-radius: 99px; background: var(--gold-soft); color: #7a5512; white-space: nowrap; }
+    .chip.sale { background: var(--sale); color: #fff; }
+    .feat .chip { background: rgba(255, 255, 255, .92); color: var(--ink); }
+    .feat .chip.sale { background: var(--sale); color: #fff; }
 
     /* ---------- pastki qism ---------- */
-    .foot { display: grid; grid-template-columns: repeat(3, auto) 1fr; align-items: center; gap: 0; padding: 22px 6px 8px; }
-    .perk { display: flex; align-items: center; gap: 14px; padding: 0 28px; font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; line-height: 1.5; }
-    .perk:first-child { padding-left: 0; }
-    .perk + .perk { border-left: 1px solid var(--line); }
-    .perk svg { width: 50px; height: 50px; flex: none; }
-    .foot .script { justify-self: end; font-size: 46px; transform: rotate(-10deg); }
-    .info { text-align: center; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: .03em; margin-top: 14px; }
-    .info b { color: var(--cream); font-weight: 700; }
-    .state { text-align: center; color: var(--muted); padding: 80px 10px; font-size: 17px; font-weight: 600; }
+    .bottom { margin-top: 20px; background: var(--green); color: #f4ecdd; }
+    .bottom .wrap { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 24px; padding-top: 30px; padding-bottom: 30px; align-items: start; }
+    .bottom .brand { font-family: Fraunces, serif; font-size: 30px; font-weight: 900; line-height: 1; }
+    .bottom .brand small { display: block; font-family: Manrope, sans-serif; font-size: 13px; font-weight: 600; opacity: .7; margin-top: 8px; letter-spacing: .02em; }
+    .bottom .k { font-size: 11px; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; color: #d9b56c; margin-bottom: 6px; }
+    .bottom .v { font-size: 15px; font-weight: 600; line-height: 1.5; }
+    .state { text-align: center; color: var(--ink-2); padding: 120px 10px; font-size: 17px; font-weight: 600; }
 
-    @media (max-width: 900px) {
-      .poster { padding: 22px 14px; }
-      .head { grid-template-columns: 1fr; text-align: center; }
-      .head .script, .slogan { display: none; }
-      .deco { display: none; }
-      .sec-title { padding-right: 0; flex-wrap: wrap; gap: 8px 14px; }
-      .sec-title .rule { display: none; }
-      .items, .row .items { margin-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 22px 0; }
-      .item { padding: 0 10px; }
-      .item:nth-child(odd) { padding-left: 0; border-left: 0; }
-      .row { grid-template-columns: 1fr !important; }
-      .foot { grid-template-columns: 1fr; gap: 16px; justify-items: start; }
-      .perk, .perk:first-child { padding: 0; border: 0 !important; }
-      .foot .script { justify-self: center; }
-      .price { font-size: 18px; text-align: right; } .price.big { font-size: 22px; text-align: left; }
-      .price s { display: block; margin: 0; font-size: 11px; line-height: 1.1; }
-      .price-row .v { font-size: 13px; }
-      .tagline { letter-spacing: .22em; font-size: 11px; }
+    @media (max-width: 860px) {
+      .wrap { padding: 0 16px; }
+      .top { grid-template-columns: 1fr; padding-top: 28px; }
+      .meta { text-align: left; }
+      .stamp { display: none; }
+      .cats { columns: 1; }
+      .cat-head h2 { font-size: 26px; }
+      .dish { grid-template-columns: 74px 1fr; gap: 12px; }
+      .ph { width: 74px; height: 74px; }
+      .feat { min-height: 240px; }
+      .bottom .wrap { grid-template-columns: 1fr 1fr; }
+      .bottom .brand { grid-column: 1 / -1; }
     }
     @media print {
-      @page { size: A4; margin: 8mm; }
-      .poster { max-width: none; padding: 0; }
-      .section, .row { break-inside: avoid; }
+      @page { size: A4; margin: 10mm; }
+      .feat { min-height: 220px; }
     }
   </style>
 </head>
 <body>
-  <main class="poster" id="poster"><div class="state">Menyu yuklanmoqda…</div></main>
+  <div id="page"><div class="state">Taomnoma yuklanmoqda…</div></div>
 
   <script>
   (() => {
@@ -152,97 +144,107 @@
 
     const T = {
       uz: {
-        slogan: ["Mazali", "Tez", "Siz uchun"], loading: "Menyu yuklanmoqda…", error: "Menyuni yuklab bo'lmadi. Birozdan so'ng qayta urinamiz…",
-        perks: ["Yangi<br>masalliqlar", "Issiq<br>qahva", "Yaxshi<br>kompaniya"], currency: "Narxlar so'mda",
-        subs: ["Klassika yangi ta'mda", "Har biri o'zgacha", "Shunchaki ovqatdan ko'proq", "An'anaviy ta'm", "Issiq va qarsildoq", "Sevib tayyorlanadi"],
+        eyebrow: "Taomnoma", sub: "go'sht", loading: "Taomnoma yuklanmoqda…",
+        error: "Taomnomani yuklab bo'lmadi. Birozdan so'ng qayta urinamiz…",
+        featured: "Mehmonlarimiz tanlovi", dishes: (n) => `${n} xil taom`, currency: "Narxlar so'mda",
+        updated: "Yangilangan", stamp: ["Har kuni", "yangi", "tayyorlanadi"], phone: "Telefon", address: "Manzil",
+        hours: "Ish vaqti", tagline: "Mazali, tez va doim yangi", sum: "so'm",
+        months: ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"],
         badges: { hit: "🔥 Hit", new: "🆕 Yangi", top: "⭐ Top", spicy: "🌶 Achchiq" },
       },
       ru: {
-        slogan: ["Вкусно", "Быстро", "Для тебя"], loading: "Меню загружается…", error: "Не удалось загрузить меню. Повторим попытку…",
-        perks: ["Свежие<br>ингредиенты", "Горячий<br>кофе", "Хорошая<br>компания"], currency: "Цены в сумах",
-        subs: ["Классика в новом вкусе", "Каждый — особенный", "Больше чем просто еда", "Традиции в лучшем вкусе", "Горячо и хрустяще", "Готовим с любовью"],
+        eyebrow: "Меню", sub: "go'sht", loading: "Меню загружается…",
+        error: "Не удалось загрузить меню. Повторим попытку…",
+        featured: "Выбор наших гостей", dishes: (n) => `${n} блюд`, currency: "Цены в сумах",
+        updated: "Обновлено", stamp: ["Каждый", "день", "свежее"], phone: "Телефон", address: "Адрес",
+        hours: "Время работы", tagline: "Вкусно, быстро и всегда свежо", sum: "сум",
+        months: ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"],
         badges: { hit: "🔥 Хит", new: "🆕 Новинка", top: "⭐ Топ", spicy: "🌶 Острое" },
       },
     }[LANG];
-    const DECO = ["Hot &amp;<br>Fresh", "Crispy<br>Tasty<br>Different", "Real Taste<br>Real<br>Happiness", "Made<br>with Love", "Good Food<br>Good Mood"];
 
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const num = (n) => String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     const img = (p) => (!p ? "" : /^https?:/.test(p) ? p : API + "/" + p);
+    const pad = (n) => String(n).padStart(2, "0");
 
-    const CROWN = `<svg class="crown" viewBox="0 0 64 40" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fbefcf"/><stop offset="1" stop-color="#b98a3e"/></linearGradient></defs>
-      <path d="M6 32 2 8l15 12L32 2l15 18L62 8l-4 24z" fill="none" stroke="url(#g)" stroke-width="3" stroke-linejoin="round"/>
-      <rect x="6" y="34" width="52" height="4" rx="2" fill="url(#g)"/></svg>`;
-    const ICONS = [
-      `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 22c0-8 8-13 18-13s18 5 18 13z"/><path d="M5 27h38M7 32c4 2 8-2 12 0s8-2 12 0 8-2 12 0"/><path d="M7 36h34a2 2 0 0 1 0 0 4 4 0 0 1-4 4H11a4 4 0 0 1-4-4z"/><path d="M17 15h.01M24 13h.01M31 15h.01"/></svg>`,
-      `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 20h28v8a12 12 0 0 1-12 12h-4A12 12 0 0 1 8 28z"/><path d="M36 23h3a5 5 0 0 1 0 10h-4M5 44h34"/><path d="M17 6c-2 3 2 5 0 8M23 5c-2 3 2 5 0 8M29 6c-2 3 2 5 0 8"/></svg>`,
-      `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="17" cy="16" r="7"/><circle cx="33" cy="16" r="7"/><path d="M4 40c0-8 6-13 13-13s13 5 13 13zM30 27c1-.3 2-.4 3-.4 7 0 12 5 12 13H33"/></svg>`,
-    ];
+    const pct = (p) => {
+      const v = p.variants.find((x) => x.old_price);
+      return v ? Math.round((1 - v.price / v.old_price) * 100) : 0;
+    };
+    const chips = (p) => {
+      const list = p.badges.map((b) => `<span class="chip">${esc(T.badges[b] || b)}</span>`);
+      if (pct(p) > 0) list.push(`<span class="chip sale">−${pct(p)}%</span>`);
+      return list.length ? `<span class="chips">${list.join("")}</span>` : "";
+    };
+    const one = (p) => p.variants.length === 1 && !p.variants[0].name;
+    const priceTxt = (v) => (v.old_price ? `<s>${num(v.old_price)}</s>${num(v.price)}` : num(v.price));
 
-    function prices(p) {
-      const one = p.variants.length === 1 && !p.variants[0].name;
-      return `<div class="prices">${p.variants.map((v) => `<div class="price-row">
-          ${one ? "" : `<span class="v">${esc(v.name)}</span>`}
-          <span class="price${one ? " big" : ""}">${v.old_price ? `<s>${num(v.old_price)}</s><span class="now">${num(v.price)}</span>` : num(v.price)}</span>
-        </div>`).join("")}</div>`;
-    }
-
-    function item(p) {
-      const pct = p.discount && p.variants[0].old_price
-        ? Math.round((1 - p.variants[0].price / p.variants[0].old_price) * 100) : 0;
-      return `<div class="item">
-        <div class="item-name">${esc(p.name)}</div>
-        <div class="pic${p.image ? "" : " empty"}" ${p.image ? `style="background-image:url('${esc(img(p.image))}')"` : ""}>${p.image ? "" : "🍽"}
-          ${p.badges.length ? `<div class="tags">${p.badges.map((b) => `<span class="tag">${esc(T.badges[b] || b)}</span>`).join("")}</div>` : ""}
-          ${pct > 0 ? `<span class="off">−${pct}%</span>` : ""}
+    function dish(p) {
+      const single = one(p);
+      const v = p.variants[0];
+      const c = chips(p);
+      return `<article class="dish">
+        <div class="ph" ${p.image ? `style="background-image:url('${esc(img(p.image))}')"` : ""}>${p.image ? "" : "🍽"}</div>
+        <div>
+          <div class="row1">
+            <span class="dname">${esc(p.name)}</span>
+            ${single ? `<span class="dots"></span><span class="price${v.old_price ? " sale" : ""}">${priceTxt(v)}</span>` : ""}
+          </div>
+          ${p.description ? `<div class="desc">${esc(p.description)}</div>` : ""}
+          ${single ? "" : `<div class="sizes">${p.variants.map((x) =>
+            `<span class="size${x.old_price ? " sale" : ""}">${esc(x.name)} ${x.old_price ? `<s>${num(x.old_price)}</s>` : ""}<b>${num(x.price)}</b></span>`).join("")}</div>`}
+          ${c ? `<div style="margin-top:8px">${c}</div>` : ""}
         </div>
-        ${prices(p)}
-      </div>`;
+      </article>`;
     }
 
-    function section(c, i, opts = {}) {
-      const cols = Math.min(c.products.length, opts.small ? 2 : 4);
-      return `<section class="section${opts.cream ? " cream" : ""}">
-        <div class="sec-title"><h2>${esc(c.name)}</h2>${opts.small ? "" : `<span class="sub">${esc(T.subs[i % T.subs.length])}</span><span class="rule"></span>`}</div>
-        ${opts.small ? "" : `<div class="deco script">${DECO[i % DECO.length]}</div>`}
-        <div class="items" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${c.products.map(item).join("")}</div>
-      </section>`;
+    // Admin panelda «Hit», «Top» belgisi yoki chegirma qo'yilgan taomlar tepada katta ko'rsatiladi
+    function featured(cats) {
+      const pick = cats.flatMap((c) => c.products)
+        .filter((p) => p.badges.includes("hit") || p.badges.includes("top") || pct(p) > 0)
+        .sort((a, b) => pct(b) - pct(a)).slice(0, 3);
+      if (!pick.length) return "";
+      return `<section class="featured"><h2>${esc(T.featured)}</h2><div class="feat-grid">${pick.map((p) => {
+        const v = p.variants[0];
+        return `<div class="feat" ${p.image ? `style="background-image:url('${esc(img(p.image))}')"` : ""}>
+          ${chips(p)}
+          <div class="in"><div class="nm">${esc(p.name)}</div>
+            ${p.description ? `<div class="ds">${esc(p.description)}</div>` : ""}
+            <div class="pr">${one(p) ? "" : esc(v.name) + " · "}${priceTxt(v)} ${esc(T.sum)}</div></div>
+        </div>`;
+      }).join("")}</div></section>`;
     }
 
     function render(data) {
-      // 1–2 mahsulotli kategoriyalar bir qatorga yonma-yon (namunadagi Donar · Lavash · Fri kabi)
-      const blocks = [];
-      let small = [];
-      const flush = () => { if (small.length) { blocks.push({ row: small }); small = []; } };
-      data.categories.forEach((c) => {
-        if (c.products.length <= 2) { small.push(c); if (small.length === 3) flush(); }
-        else { flush(); blocks.push({ cat: c }); }
-      });
-      flush();
+      const d = new Date();
+      const date = `${d.getDate()}-${T.months[d.getMonth()]}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      const total = data.categories.reduce((s, c) => s + c.products.length, 0);
+      const cats = data.categories.map((c, i) => `<section class="cat">
+          <div class="cat-head"><span class="cat-num">${pad(i + 1)}</span><h2>${esc(c.name)}</h2>
+            <span class="cat-count">${esc(T.dishes(c.products.length))}</span></div>
+          ${c.products.map(dish).join("")}
+        </section>`).join("");
 
-      let big = 0, idx = 0;
-      const body = blocks.map((b) => {
-        if (b.cat) { const html = section(b.cat, idx++, { cream: big % 3 === 2 }); big++; return html; }
-        const weights = b.row.map((c) => c.products.length).join("fr ") + "fr";
-        return `<div class="row" style="grid-template-columns:${weights}">${b.row.map((c) => section(c, idx++, { small: true })).join("")}</div>`;
-      }).join("");
-
-      const info = [data.phone && `📞 <b>${esc(data.phone)}</b>`, data.address && `📍 ${esc(data.address)}`, data.schedule && `🕐 ${esc(data.schedule)}`, T.currency]
-        .filter(Boolean).join("  ·  ");
-
-      document.getElementById("poster").innerHTML = `
-        <header class="head">
-          <div class="script">Good Food<br>Good Mood</div>
-          <div class="brand">${CROWN}<h1 class="logo">Yaproq go'sht</h1><div class="tagline">BURGER • COFFEE • GOOD MOOD</div></div>
-          <div class="slogan">${T.slogan.map(esc).join("<br>")}</div>
+      document.getElementById("page").innerHTML = `
+        <header class="wrap top">
+          <div><div class="eyebrow">${esc(T.eyebrow)} · ${esc(T.dishes(total))}</div>
+            <h1 class="title">Yaproq <em>${esc(T.sub)}</em></h1></div>
+          <div class="meta">
+            <div class="stamp"><span>${esc(T.stamp[0])}<b>${esc(T.stamp[1])}</b>${esc(T.stamp[2])}</span></div><br>
+            ${esc(T.updated)}: <b>${esc(date)}</b><br>${esc(T.currency)}
+          </div>
         </header>
-        ${body || `<div class="state">—</div>`}
-        <footer class="foot">
-          ${T.perks.map((t, i) => `<div class="perk">${ICONS[i]}<span>${t}</span></div>`).join("")}
-          <div class="script">See you<br>soon! ♡</div>
-        </footer>
-        <div class="info">${info}</div>`;
+        <main class="wrap">
+          ${featured(data.categories)}
+          <div class="cats">${cats || `<div class="state">—</div>`}</div>
+        </main>
+        <footer class="bottom"><div class="wrap">
+          <div class="brand">Yaproq go'sht<small>${esc(T.tagline)}</small></div>
+          <div>${data.phone ? `<div class="k">${esc(T.phone)}</div><div class="v">${esc(data.phone)}</div>` : ""}</div>
+          <div>${data.address ? `<div class="k">${esc(T.address)}</div><div class="v">${esc(data.address)}</div>` : ""}</div>
+          <div>${data.schedule ? `<div class="k">${esc(T.hours)}</div><div class="v">${esc(data.schedule)}</div>` : ""}</div>
+        </div></footer>`;
     }
 
     async function load() {
@@ -252,13 +254,13 @@
         if (!data.ok) throw new Error();
         render(data);
       } catch (e) {
-        if (!document.querySelector(".head")) document.getElementById("poster").innerHTML = `<div class="state">${esc(T.error)}</div>`;
+        if (!document.querySelector(".top")) document.getElementById("page").innerHTML = `<div class="state">${esc(T.error)}</div>`;
         setTimeout(load, 30000);
       }
     }
-    document.getElementById("poster").firstElementChild.textContent = T.loading;
+    document.querySelector(".state").textContent = T.loading;
     load();
-    setInterval(load, 5 * 60 * 1000);  // ekranda doim ochiq tursa — narxlar o'zi yangilanadi
+    setInterval(load, 5 * 60 * 1000);  // ekranda ochiq tursa narxlar o'zi yangilanadi
   })();
   </script>
 </body>
