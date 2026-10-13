@@ -34,7 +34,8 @@ CORS_HEADERS = "Content-Type, X-Telegram-Init-Data, X-Admin-Token, X-Dev-User"
 async def cors_middleware(request: web.Request, handler):
     """Mini App / admin panel boshqa domenda (masalan shared hosting) joylashganda API ga ruxsat."""
     origin = request.headers.get("Origin", "").rstrip("/")
-    allowed = origin and (origin in config.cors_origins or "*" in config.cors_origins)
+    allowed = origin and (origin in config.cors_origins or "*" in config.cors_origins
+                          or request.path.startswith("/api/public/"))
     if request.method == "OPTIONS" and request.path.startswith("/api/"):
         resp = web.Response(status=204)
     else:
@@ -56,7 +57,7 @@ async def cors_middleware(request: web.Request, handler):
 
 @web.middleware
 async def auth_middleware(request: web.Request, handler):
-    if not request.path.startswith("/api/") or request.path.startswith("/api/admin/"):
+    if not request.path.startswith("/api/") or request.path.startswith(("/api/admin/", "/api/public/")):
         return await handler(request)
     init_data = request.headers.get("X-Telegram-Init-Data", "")
     tg_user = None
@@ -148,6 +149,24 @@ async def api_menu(request: web.Request) -> web.Response:
         "settings": public_settings(raw),
         "slots": hours.slots(raw),
     })
+
+
+async def api_public_menu(request: web.Request) -> web.Response:
+    """Ochiq menyu (poster-sahifa uchun): faqat o'qish, shaxsiy ma'lumotsiz."""
+    lang = norm_lang(request.query.get("lang"))
+    raw = await db.get_settings()
+    cats = await db.get_menu(lang)
+    for c in cats:
+        for p in c["products"]:
+            p.pop("search", None)
+    return web.json_response({
+        "ok": True,
+        "lang": lang,
+        "categories": cats,
+        "phone": raw.get("phone") or "",
+        "address": raw.get("cafe_address") or "",
+        "schedule": hours.schedule_summary(raw, lang),
+    }, headers={"Cache-Control": "public, max-age=60"})
 
 
 async def api_me(request: web.Request) -> web.Response:
@@ -322,6 +341,8 @@ def create_app(bot: Bot | None) -> web.Application:
     app.router.add_static("/img", config.webapp_dir / "img")
     app.router.add_static("/uploads", config.uploads_dir)
     app.router.add_get("/api/menu", api_menu)
+    app.router.add_get("/api/public/menu", api_public_menu)
+    app.router.add_get("/menu", static_file("menu.html"))
     app.router.add_get("/api/me", api_me)
     app.router.add_post("/api/me/lang", api_set_lang)
     app.router.add_post("/api/quote", api_quote)

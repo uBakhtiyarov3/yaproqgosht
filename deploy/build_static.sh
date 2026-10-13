@@ -24,6 +24,9 @@ cp webapp/app.js webapp/style.css "$OUT/"
 sed "s/{{v}}/$V/g" webapp/admin/index.html > "$OUT/admin/index.html"
 cp webapp/admin/admin.js webapp/admin/admin.css "$OUT/admin/"
 printf 'window.YG_CONFIG = { api: "%s" };\n' "$API" > "$OUT/config.js"
+# Poster-menyu: bitta mustaqil fayl (server manzili ichiga yozilgan) — istalgan joyda ochiladi
+sed "s#<script src=\"config.js\"></script>#<script>window.YG_CONFIG = { api: \"$API\" };</script>#" \
+  webapp/menu.html > "$OUT/menu.html"
 
 cat > "$OUT/.htaccess" <<'HT'
 Options -Indexes

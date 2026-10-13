@@ -169,3 +169,16 @@ def test_normalize_phone():
     assert normalize_phone("90 123 45 67") == "+998901234567"
     assert normalize_phone("+998 (90) 123-45-67") == "+998901234567"
     assert normalize_phone("123") is None
+
+
+async def test_public_menu_without_auth(client):
+    r = await client.get("/api/public/menu?lang=ru", headers={"Origin": "https://example.com"})
+    assert r.status == 200
+    assert r.headers["Access-Control-Allow-Origin"] == "https://example.com"
+    data = await r.json()
+    assert data["lang"] == "ru" and data["categories"]
+    p = data["categories"][0]["products"][0]
+    assert p["variants"][0]["price"] > 0 and "search" not in p
+    # faqat o'qish: boshqa API lar hali ham Telegram kirishini talab qiladi
+    assert (await client.get("/api/orders")).status == 401
+    assert (await client.get("/menu")).status == 200
