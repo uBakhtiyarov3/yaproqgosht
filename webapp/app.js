@@ -478,7 +478,7 @@
     $("#delivery-block").classList.toggle("hidden", pickup);
     const box = $("#pickup-block");
     box.classList.toggle("hidden", !pickup);
-    if (pickup) box.innerHTML = `<b>${esc(L("pickupFrom"))}</b>${state.settings.cafe_address ? `<div>📍 ${esc(state.settings.cafe_address)}</div>` : ""}`;
+    if (pickup) box.innerHTML = `<b>${esc(L("pickupFrom"))}</b>${state.settings.cafe_address ? `<div>📍 ${esc(state.settings.cafe_address)}</div>` : ""}${mapLink()}`;
   }
 
   $("#type-seg").addEventListener("click", (e) => {
@@ -488,6 +488,17 @@
     state.co.type = b.dataset.type;
     renderType();
     refreshQuote();
+  });
+
+  function mapLink() {
+    const url = state.settings.cafe_map_url;
+    return url ? `<a class="map-link" href="${esc(url)}" data-map target="_blank" rel="noopener">🗺 ${esc(L("openMap"))}</a>` : "";
+  }
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-map]");
+    if (!a) return;
+    e.preventDefault();
+    if (tg && tg.openLink) tg.openLink(a.href); else window.open(a.href, "_blank", "noopener");
   });
 
   function renderTime() {
@@ -779,7 +790,7 @@
       <div class="summary od-info">
         <div>👤 <b>${esc(o.customer_name)}</b></div>
         <div>📞 <b>+998 ${esc(formatLocal(localDigits(o.phone)))}</b></div>
-        ${o.order_type === "delivery" ? `<div>📍 <b>${esc(o.address)}</b></div>` : (state.settings.cafe_address ? `<div>🏃 <b>${esc(state.settings.cafe_address)}</b></div>` : "")}
+        ${o.order_type === "delivery" ? `<div>📍 <b>${esc(o.address)}</b></div>` : `${state.settings.cafe_address ? `<div>🏃 <b>${esc(state.settings.cafe_address)}</b></div>` : ""}${mapLink()}`}
         ${o.comment ? `<div>💬 ${esc(o.comment)}</div>` : ""}
         <div>${esc(L("cash"))}</div>
       </div>

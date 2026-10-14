@@ -849,6 +849,14 @@
           <label class="f"><span>Telefon raqam</span><input id="s-phone" maxlength="40" value="${esc(s.phone)}" placeholder="+998 90 123 45 67"></label>
           <label class="f"><span>Kafe manzili (olib ketish uchun)</span><input id="s-addr" maxlength="200" value="${esc(s.cafe_address)}"></label>
         </div>
+        <label class="f"><span>📍 Google Maps havolasi (olib ketish joyi)</span><input id="s-map" maxlength="500" value="${esc(s.cafe_map_url)}" placeholder="https://maps.app.goo.gl/..."></label>
+        <div class="row">
+          <label class="f"><span>Kenglik (latitude)</span><input id="s-lat" value="${esc(s.cafe_lat)}" placeholder="41.291028"></label>
+          <label class="f"><span>Uzunlik (longitude)</span><input id="s-lng" value="${esc(s.cafe_lng)}" placeholder="69.201361"></label>
+        </div>
+        <div class="hint">Olib ketish buyurtmasi tayyor bo'lganda mijozga shu joy Telegram lokatsiyasi sifatida yuboriladi,
+          Mini App'da esa havola ko'rinadi. Koordinatalar bo'sh qolsa, havoladan avtomatik aniqlanadi
+          ${s.cafe_map_url && !s.cafe_lat ? '<b class="red">— hozircha aniqlanmadi, qo\'lda kiriting (Google Maps\'da nuqtani bosib ushlab turing → raqamlarni nusxalang)</b>' : ""}.</div>
       </div>
       <div class="btn-row"><button class="btn primary" id="s-save">💾 Sozlamalarni saqlash</button>
         <span class="muted small">Saqlangach bot va mini ilova darhol yangi sozlamalar bilan ishlaydi.</span></div>`;
@@ -880,6 +888,7 @@
         delivery_fee: +$("#s-fee", root).value || 0, min_order: +$("#s-min", root).value || 0,
         prep_time: +$("#s-prep", root).value || 40, slot_step: +$("#s-step", root).value || 30,
         phone: $("#s-phone", root).value, cafe_address: $("#s-addr", root).value,
+        cafe_map_url: $("#s-map", root).value.trim(), cafe_lat: $("#s-lat", root).value.trim(), cafe_lng: $("#s-lng", root).value.trim(),
       };
       if (await run(() => api("settings", { method: "PUT", body }), "Saqlandi — bot darhol yangilandi")) { pollOrders(); route(); }
     };

@@ -190,3 +190,12 @@ def test_slots_today_only():
     # kech kirilganda ertangi kun taklif qilinmaydi
     assert hours.slots(settings, datetime(2026, 10, 2, 22, 50, tzinfo=TZ)) == []
     assert not hours.valid_slot(settings, "2026-10-03 12:00", datetime(2026, 10, 2, 12, 0, tzinfo=TZ))
+
+
+def test_parse_map_coords():
+    from app.geo import parse_coords
+
+    assert parse_coords("https://www.google.com/maps/place/Cafe/@41.29,69.20,17z/data=!3d41.2910278!4d69.2013611") == (41.2910278, 69.2013611)
+    assert parse_coords("https://maps.google.com/?q=41.291028,69.201361") == (41.291028, 69.201361)
+    assert parse_coords("https://www.google.com/maps/@41.3,69.25,15z") == (41.3, 69.25)
+    assert parse_coords("https://maps.app.goo.gl/315Mu9vFDWyXUdRX7") is None

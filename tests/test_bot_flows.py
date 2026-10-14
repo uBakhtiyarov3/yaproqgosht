@@ -488,3 +488,35 @@ async def test_rich_card_falls_back_to_text(env, monkeypatch):
     await notify_new_order(bot, oid, notify_customer=False)
     plain = [c for c in s.calls if type(c).__name__ == "SendMessage" and c.chat_id == STAFF]
     assert plain and "YANGI BUYURTMA" in plain[0].text and plain[0].reply_markup
+
+
+async def test_pickup_ready_sends_location(env):
+    bot, dp, s = env
+    for uid in (ADMIN, STAFF, CUSTOMER):
+        await send(bot, dp, uid, "/start")
+    await db.set_role(STAFF, "staff")
+    await db.set_setting("cafe_address", "Toshkent, Chilonzor 9")
+    await db.set_setting("cafe_lat", "41.291028")
+    await db.set_setting("cafe_lng", "69.201361")
+    oid = await db.create_order(CUSTOMER, {"name": "Ali", "phone": "+998901234567", "address": "", "payment_method": "cash",
+                                           "order_type": "pickup"},
+                                [{"product_id": 1, "name": "X", "variant": "", "price": 15000, "qty": 1}], 0)
+    for st in ("accepted", "cooking"):
+        await click(bot, dp, STAFF, f"ost:{oid}:{st}")
+    assert not [c for c in s.calls if type(c).__name__ == "SendVenue"]
+    await click(bot, dp, STAFF, f"ost:{oid}:delivering")  # tayyor — olib ketishni kutmoqda
+    venues = [c for c in s.calls if type(c).__name__ == "SendVenue"]
+    assert len(venues) == 1 and venues[0].chat_id == CUSTOMER
+    assert (venues[0].latitude, venues[0].longitude) == (41.291028, 69.201361)
+    assert venues[0].reply_markup.inline_keyboard[0][0].url.startswith("https://maps.app.goo.gl/")
+
+
+async def test_pickup_ready_without_coords_sends_link(env):
+    bot, dp, s = env
+    from app.notify import send_pickup_location
+
+    await db.set_setting("cafe_lat", "")
+    await send_pickup_location(bot, CUSTOMER, "uz")
+    msgs = [c for c in s.calls if type(c).__name__ == "SendMessage" and c.chat_id == CUSTOMER]
+    assert msgs and "Olib ketish manzili" in msgs[0].text
+    assert msgs[0].reply_markup.inline_keyboard[0][0].url.startswith("https://maps.app.goo.gl/")

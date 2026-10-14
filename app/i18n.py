@@ -161,6 +161,9 @@ T: dict[str, dict[str, str]] = {
     "thanks": {"uz": "Rahmat! 😊", "ru": "Спасибо! 😊"},
     "pickup_from": {"uz": "🏃 Olib ketish: {address}", "ru": "🏃 Самовывоз: {address}"},
     "pickup_cafe": {"uz": "kafedan", "ru": "из кафе"},
+    "pickup_location": {"uz": "📍 <b>Olib ketish manzili</b>{address}\n\nXaritadagi nuqtani bosib, yo'nalish olishingiz mumkin.",
+                        "ru": "📍 <b>Адрес самовывоза</b>{address}\n\nНажмите на точку на карте, чтобы построить маршрут."},
+    "map_btn": {"uz": "🗺 Google Maps'da ochish", "ru": "🗺 Открыть в Google Maps"},
     "when_asap": {"uz": "⚡ Imkon qadar tez", "ru": "⚡ Как можно скорее"},
     "when_at": {"uz": "⏰ Vaqtga: {when}", "ru": "⏰ Ко времени: {when}"},
 
@@ -304,6 +307,7 @@ W: dict[str, dict[str, str]] = {
     "delivery": {"uz": "🛵 Yetkazib berish", "ru": "🛵 Доставка"},
     "pickup": {"uz": "🏃 Olib ketish", "ru": "🏃 Самовывоз"},
     "pickupFrom": {"uz": "🏃 Buyurtmani kafedan olib ketasiz", "ru": "🏃 Заберёте заказ в кафе"},
+    "openMap": {"uz": "Xaritada ochish", "ru": "Открыть на карте"},
     "name": {"uz": "Qabul qiluvchi ismi", "ru": "Имя получателя"},
     "namePh": {"uz": "Ismingiz", "ru": "Ваше имя"},
     "phone": {"uz": "Telefon raqam", "ru": "Телефон"},

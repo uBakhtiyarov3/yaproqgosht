@@ -180,3 +180,17 @@ async def test_order_delete_manager_only(client):
     assert not await db.get_order_items(order["id"])
     r = await client.get(f"/api/orders/{code}", headers={"X-Telegram-Init-Data": make_init_data(301)})
     assert r.status == 404
+
+
+async def test_settings_map_location(client):
+    hdr = await login(client)
+    r = await client.put("/api/admin/settings", headers=hdr, json={
+        "cafe_map_url": "https://www.google.com/maps/place/X/@41.3,69.2,17z/data=!3d41.2910278!4d69.2013611",
+        "cafe_lat": "", "cafe_lng": ""})
+    st = (await r.json())["settings"]
+    assert (st["cafe_lat"], st["cafe_lng"]) == ("41.291028", "69.201361")  # havoladan avtomatik
+    r = await client.put("/api/admin/settings", headers=hdr, json={"cafe_lat": "41,5", "cafe_lng": "69.1"})
+    assert (await r.json())["settings"]["cafe_lat"] == "41.500000"
+    assert (await client.put("/api/admin/settings", headers=hdr, json={"cafe_map_url": "http://x"})).status == 400
+    r = await client.get("/api/menu", headers={"X-Telegram-Init-Data": make_init_data(77)})
+    assert (await r.json())["settings"]["cafe_map_url"].startswith("https://www.google.com/maps")

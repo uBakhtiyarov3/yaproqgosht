@@ -464,6 +464,12 @@ input, textarea { font: inherit; }
   background: linear-gradient(145deg, rgba(246, 220, 156, .16), rgba(246, 220, 156, .04)); border: 1px solid rgba(246, 220, 156, .3);
 }
 
+.map-link {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 7px 14px; border-radius: 99px;
+  font-weight: 700; font-size: 14px; color: var(--gold-2); text-decoration: none;
+  background: rgba(246, 220, 156, .12); border: 1px solid rgba(246, 220, 156, .35);
+}
+
 .slot-picker { margin: -4px 0 14px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .chips.times { max-height: 190px; overflow-y: auto; }

@@ -141,10 +141,34 @@ async def notify_status_change(bot: Bot, order_id: int) -> None:
         return
     try:
         await bot.send_message(order["user_id"], text, reply_markup=order_track_kb(order["code"], lang))
+        if order["status"] == "delivering" and (order.get("order_type") or "delivery") == "pickup":
+            await send_pickup_location(bot, order["user_id"], lang)
         if order["status"] == "delivered" and not await db.get_review(order_id):
             await bot.send_message(order["user_id"], t("rate_ask", lang), reply_markup=rating_kb(order_id))
     except (TelegramForbiddenError, TelegramBadRequest) as e:
         log.warning("Mijozga holat yuborilmadi %s: %s", order["user_id"], e)
+
+
+async def send_pickup_location(bot: Bot, chat_id: int, lang: str) -> None:
+    """Olib ketish buyurtmasi tayyor bo'lganda kafe joylashuvini Telegram lokatsiyasi sifatida yuboradi."""
+    from aiogram.types import InlineKeyboardButton
+
+    from .geo import cafe_location
+
+    s = await db.get_settings()
+    url = (s.get("cafe_map_url") or "").strip()
+    address = (s.get("cafe_address") or "").strip()
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t("map_btn", lang), url=url)]]) if url else None
+    coords = await cafe_location()
+    try:
+        if coords:
+            await bot.send_venue(chat_id, coords[0], coords[1], title="Yaproq go'sht",
+                                 address=address or t("pickup_cafe", lang), reply_markup=kb)
+        elif url or address:
+            await bot.send_message(chat_id, t("pickup_location", lang, address=f"\n{h(address)}" if address else ""),
+                                   reply_markup=kb, disable_web_page_preview=True)
+    except (TelegramForbiddenError, TelegramBadRequest) as e:
+        log.warning("Lokatsiya yuborilmadi %s: %s", chat_id, e)
 
 
 async def notify_review(bot: Bot, order_id: int) -> None:

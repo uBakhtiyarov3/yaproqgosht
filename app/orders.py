@@ -66,6 +66,7 @@ def public_settings(s: dict) -> dict:
         "delivery_enabled": s.get("delivery_enabled", "1") == "1",
         "pickup_enabled": s.get("pickup_enabled", "1") == "1",
         "cafe_address": s.get("cafe_address") or "",
+        "cafe_map_url": s.get("cafe_map_url") or "",
     }
 
 

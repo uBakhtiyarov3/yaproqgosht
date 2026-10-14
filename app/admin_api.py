@@ -431,6 +431,9 @@ async def _settings_payload() -> web.Response:
         "min_order": int(raw.get("min_order") or 0),
         "phone": raw.get("phone") or "",
         "cafe_address": raw.get("cafe_address") or "",
+        "cafe_map_url": raw.get("cafe_map_url") or "",
+        "cafe_lat": raw.get("cafe_lat") or "",
+        "cafe_lng": raw.get("cafe_lng") or "",
         "delivery_enabled": raw.get("delivery_enabled", "1") == "1",
         "pickup_enabled": raw.get("pickup_enabled", "1") == "1",
         "prep_time": int(raw.get("prep_time") or 40),
@@ -478,14 +481,32 @@ async def settings_save(request: web.Request) -> web.Response:
         for key in ("delivery_enabled", "pickup_enabled"):
             if key in data:
                 updates[key] = "1" if data[key] else "0"
+        if "cafe_map_url" in data:
+            url = _str(data, "cafe_map_url", 500)
+            if url and not re.match(r"^https://\S+$", url):
+                raise ValueError("Xarita havolasi https:// bilan boshlanishi kerak")
+            updates["cafe_map_url"] = url
+        for key, lo, hi in (("cafe_lat", -90, 90), ("cafe_lng", -180, 180)):
+            if key in data:
+                raw_v = str(data[key] or "").strip().replace(",", ".")
+                if raw_v and not lo <= float(raw_v) <= hi:
+                    raise ValueError("Koordinata noto'g'ri")
+                updates[key] = f"{float(raw_v):.6f}" if raw_v else ""
     except (ValueError, TypeError) as e:
         return err(str(e))
     current = await db.get_settings()
     merged = {**current, **updates}
     if merged.get("delivery_enabled", "1") != "1" and merged.get("pickup_enabled", "1") != "1":
         return err("Yetkazib berish yoki olib ketishdan kamida bittasi yoqilgan bo'lishi kerak")
+    if updates.get("cafe_map_url", current.get("cafe_map_url")) != current.get("cafe_map_url") \
+            and "cafe_lat" not in data:
+        updates["cafe_lat"] = updates["cafe_lng"] = ""  # yangi havola — koordinata qaytadan aniqlanadi
     for k, v in updates.items():
         await db.set_setting(k, v)
+    if "cafe_map_url" in updates:
+        from .geo import cafe_location
+
+        await cafe_location(force=True)
     return await _settings_payload()
 
 

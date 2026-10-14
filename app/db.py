@@ -177,6 +177,10 @@ DEFAULT_SETTINGS = {
     "delivery_enabled": "1",
     "pickup_enabled": "1",
     "cafe_address": "",
+    # olib ketish: Google Maps havolasi; koordinata bo'sh bo'lsa havoladan avtomatik aniqlanadi
+    "cafe_map_url": "https://maps.app.goo.gl/315Mu9vFDWyXUdRX7",
+    "cafe_lat": "",
+    "cafe_lng": "",
     "prep_time": "40",              # vaqtga buyurtma uchun minimal tayyorlash vaqti (daqiqa)
     "slot_step": "30",              # vaqt tanlash qadami (daqiqa)
 }
